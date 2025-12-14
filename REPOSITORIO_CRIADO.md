@@ -95,10 +95,10 @@ gh repo view --web
 - [x] Código enviado (push realizado)
 - [x] Branch `main` configurada
 - [x] Workflows GitHub Actions configurados
-- [ ] CODEOWNERS atualizado (fazer manualmente)
-- [ ] Branch Protection configurado (opcional)
-- [ ] Badges adicionados ao README (opcional)
-- [ ] Secrets configurados (se necessário)
+- [x] CODEOWNERS atualizado (@wgvasque configurado)
+- [x] Badges adicionados ao README
+- [ ] Branch Protection configurado (ver `CONFIGURAR_BRANCH_PROTECTION.md`)
+- [ ] Secrets configurados (se necessário para testes de integração)
 
 ---
 
