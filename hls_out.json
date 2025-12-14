@@ -1,0 +1,69 @@
+{
+  "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+  "sources": [
+    {
+      "source_url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+      "type": "hls",
+      "drm": null,
+      "variants": [
+        {
+          "url": "https://test-streams.mux.dev/x36xhzz/url_0/193039199_mp4_h264_aac_hd_7.m3u8",
+          "type": "hls",
+          "resolution": "1280x720",
+          "bitrate_bps": 2149280,
+          "frame_rate": 60.0,
+          "codec": "h264",
+          "duration_seconds": 634.584,
+          "estimated_size_bytes": 170487337,
+          "download_url": "https://test-streams.mux.dev/x36xhzz/url_0/193039199_mp4_h264_aac_hd_7.m3u8"
+        },
+        {
+          "url": "https://test-streams.mux.dev/x36xhzz/url_2/193039199_mp4_h264_aac_ld_7.m3u8",
+          "type": "hls",
+          "resolution": "320x184",
+          "bitrate_bps": 246440,
+          "frame_rate": 30.0,
+          "codec": "h264",
+          "duration_seconds": 634.634,
+          "estimated_size_bytes": 19549900,
+          "download_url": "https://test-streams.mux.dev/x36xhzz/url_2/193039199_mp4_h264_aac_ld_7.m3u8"
+        },
+        {
+          "url": "https://test-streams.mux.dev/x36xhzz/url_4/193039199_mp4_h264_aac_7.m3u8",
+          "type": "hls",
+          "resolution": "512x288",
+          "bitrate_bps": 460560,
+          "frame_rate": 30.0,
+          "codec": "h264",
+          "duration_seconds": 634.634,
+          "estimated_size_bytes": 36535879,
+          "download_url": "https://test-streams.mux.dev/x36xhzz/url_4/193039199_mp4_h264_aac_7.m3u8"
+        },
+        {
+          "url": "https://test-streams.mux.dev/x36xhzz/url_6/193039199_mp4_h264_aac_hq_7.m3u8",
+          "type": "hls",
+          "resolution": "848x480",
+          "bitrate_bps": 836280,
+          "frame_rate": 60.0,
+          "codec": "h264",
+          "duration_seconds": 634.6,
+          "estimated_size_bytes": 66337911,
+          "download_url": "https://test-streams.mux.dev/x36xhzz/url_6/193039199_mp4_h264_aac_hq_7.m3u8"
+        },
+        {
+          "url": "https://test-streams.mux.dev/x36xhzz/url_8/193039199_mp4_h264_aac_fhd_7.m3u8",
+          "type": "hls",
+          "resolution": "1920x1080",
+          "bitrate_bps": 6221600,
+          "frame_rate": 60.0,
+          "codec": "h264",
+          "duration_seconds": 634.567,
+          "estimated_size_bytes": 493502755,
+          "download_url": "https://test-streams.mux.dev/x36xhzz/url_8/193039199_mp4_h264_aac_fhd_7.m3u8"
+        }
+      ],
+      "notes": "ffmpeg -i https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8 -c copy output.mp4"
+    }
+  ],
+  "metadata": {}
+}

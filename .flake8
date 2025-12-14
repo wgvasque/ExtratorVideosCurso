@@ -1,0 +1,28 @@
+[flake8]
+# Configuração do Flake8
+max-line-length = 120
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    env,
+    build,
+    dist,
+    *.egg-info,
+    .pytest_cache,
+    .mypy_cache
+ignore =
+    # E501: line too long (manejado por black)
+    E501,
+    # W503: line break before binary operator (incompatível com black)
+    W503,
+    # E203: whitespace before ':' (incompatível com black)
+    E203
+max-complexity = 10
+per-file-ignores =
+    __init__.py:F401
+    # Ignorar imports não usados em __init__.py
+statistics = True
+count = True
+

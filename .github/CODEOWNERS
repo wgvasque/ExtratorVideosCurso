@@ -1,0 +1,27 @@
+# CODEOWNERS - Define proprietários de código para revisão automática
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Proprietários padrão de todo o repositório
+* @seu-usuario
+
+# Arquivos de configuração críticos
+/.github/ @seu-usuario
+/setup.py @seu-usuario
+/pyproject.toml @seu-usuario
+/requirements*.txt @seu-usuario
+
+# Módulos principais
+/extrator_videos/extractor.py @seu-usuario
+/extrator_videos/openrouter_client.py @seu-usuario
+/extrator_videos/gemini_client.py @seu-usuario
+
+# Interface web
+/web_interface/ @seu-usuario
+
+# Testes
+/tests/ @seu-usuario
+
+# Documentação
+/*.md @seu-usuario
+/docs/ @seu-usuario
+

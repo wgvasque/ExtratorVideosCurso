@@ -1,0 +1,25 @@
+{
+  "url": "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
+  "sources": [
+    {
+      "source_url": "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
+      "type": "file",
+      "drm": null,
+      "variants": [
+        {
+          "url": "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
+          "type": "mp4",
+          "resolution": null,
+          "bitrate_bps": null,
+          "frame_rate": null,
+          "codec": null,
+          "duration_seconds": null,
+          "estimated_size_bytes": null,
+          "download_url": "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4"
+        }
+      ],
+      "notes": null
+    }
+  ],
+  "metadata": {}
+}

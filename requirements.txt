@@ -1,0 +1,7 @@
+playwright>=1.47.0
+requests>=2.32.3
+m3u8>=5.0.0
+python-dotenv>=1.0.1
+beautifulsoup4>=4.12.3
+faster-whisper>=1.0.0
+google-generativeai>=0.8.3

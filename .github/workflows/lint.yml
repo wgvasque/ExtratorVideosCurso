@@ -1,0 +1,115 @@
+name: Linting e Formatação
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Linting com Flake8
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+      
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+        
+    - name: Instalar dependências de linting
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 flake8-docstrings flake8-bugbear
+        
+    - name: Executar Flake8
+      run: |
+        flake8 extrator_videos/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 extrator_videos/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+      continue-on-error: true
+
+  format:
+    name: Verificar Formatação (Black)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+      
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+        
+    - name: Instalar Black
+      run: |
+        python -m pip install --upgrade pip
+        pip install black
+        
+    - name: Verificar formatação com Black
+      run: |
+        black --check --diff extrator_videos/ tests/
+      continue-on-error: true
+
+  type-check:
+    name: Verificação de Tipos (mypy)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+      
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+        
+    - name: Instalar dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install mypy types-requests types-PyYAML
+        
+    - name: Executar mypy
+      run: |
+        mypy extrator_videos/ --ignore-missing-imports --no-strict-optional
+      continue-on-error: true
+
+  security:
+    name: Verificação de Segurança
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+      
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+        
+    - name: Instalar dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+        
+    - name: Executar Bandit (análise de segurança)
+      run: |
+        bandit -r extrator_videos/ -f json -o bandit-report.json || true
+        bandit -r extrator_videos/ -ll
+      continue-on-error: true
+        
+    - name: Verificar dependências com Safety
+      run: |
+        pip install -r requirements.txt
+        safety check --json || true
+        safety check
+      continue-on-error: true
+

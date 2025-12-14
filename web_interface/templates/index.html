@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 Video Processor Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        @keyframes pulse-slow {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .processing {
+            animation: pulse-slow 2s ease-in-out infinite;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <h1 class="text-3xl font-bold">🎬 Video Processor Pro</h1>
+                <div class="flex items-center gap-4">
+                    <span id="status-badge" class="px-4 py-2 bg-white/20 rounded-full text-sm font-semibold">
+                        ⚡ Pronto
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Coluna Principal - Input e Controles -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Card de Input -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-bold text-gray-800">📝 URLs para Processar</h2>
+                        <span id="url-count" class="text-sm text-gray-500">0 URLs</span>
+                    </div>
+
+                    <textarea id="urls-input"
+                        class="w-full h-48 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-mono text-sm"
+                        placeholder="Cole as URLs aqui (uma por linha)&#10;&#10;Exemplo:&#10;https://alunos.segueadii.com.br/area/produto/item/7033466&#10;https://alunos.segueadii.com.br/area/produto/item/7081698"></textarea>
+
+                    <div class="flex gap-3 mt-4">
+                        <button onclick="pasteFromClipboard()"
+                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            📋 Colar
+                        </button>
+                        <button onclick="clearInput()"
+                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            🗑️ Limpar
+                        </button>
+                        <button onclick="loadTargetsFile()"
+                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                            📁 Carregar targets.txt
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Controles de Processamento -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex gap-4">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3 mb-3">
+                                <label class="flex items-center gap-2 text-sm text-gray-700">
+                                    <input type="radio" name="mode" value="batch" checked>
+                                    <span>Processar em lote</span>
+                                </label>
+                                <label class="flex items-center gap-2 text-sm text-gray-700">
+                                    <input type="radio" name="mode" value="single">
+                                    <span>Processar apenas a primeira URL</span>
+                                </label>
+                            </div>
+                            <button id="btn-process" onclick="startProcessing()"
+                                class="w-full px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center gap-3">
+                                <span id="btn-process-text">🚀 Processar Agora</span>
+                                <span id="btn-process-spinner" class="hidden animate-spin border-2 border-white/50 border-t-white rounded-full w-5 h-5"></span>
+                            </button>
+                        </div>
+                        <button id="btn-cancel" onclick="cancelProcessing()"
+                            class="px-6 py-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled>
+                            🛑 Cancelar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progresso -->
+                <div id="progress-card" class="bg-white rounded-xl shadow-lg p-6 hidden">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">📊 Progresso Atual</h2>
+
+                    <div class="mb-4">
+                        <div class="flex justify-between text-sm text-gray-600 mb-2">
+                            <span id="progress-text">0/0 vídeos</span>
+                            <span id="progress-percent">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                            <div id="progress-bar"
+                                class="h-full bg-gradient-to-r from-indigo-600 to-purple-600 transition-all duration-500"
+                                style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div id="current-video" class="space-y-2 text-sm">
+                        <div class="flex items-center gap-2">
+                            <span class="processing">🎥</span>
+                            <span class="font-semibold">Processando:</span>
+                            <span id="current-url" class="text-gray-600">-</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span>⏱️</span>
+                            <span class="font-semibold">Tempo:</span>
+                            <span id="elapsed-time" class="text-gray-600">0s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs (colapsável) -->
+                <div id="logs-card" class="bg-white rounded-xl shadow-lg p-6 hidden">
+                    <div class="flex items-center justify-between mb-4 cursor-pointer" onclick="toggleLogs()">
+                        <h2 class="text-xl font-bold text-gray-800">📋 Logs</h2>
+                        <span id="logs-toggle">▼</span>
+                    </div>
+                    <div id="logs-content" class="hidden">
+                        <div id="logs-list"
+                            class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-xs h-64 overflow-y-auto">
+                            <!-- Logs aparecerão aqui -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Lateral - Relatórios -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-xl shadow-lg p-6 sticky top-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-bold text-gray-800">📁 Relatórios</h2>
+                        <button onclick="refreshReports()"
+                            class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm">
+                            🔄 Atualizar
+                        </button>
+                    </div>
+
+                    <div id="reports-list" class="space-y-3 max-h-[600px] overflow-y-auto">
+                        <div class="text-center text-gray-400 py-8">
+                            Carregando relatórios...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para visualizar relatório -->
+    <div id="report-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50"
+        onclick="closeModal(event)">
+        <div class="bg-white rounded-xl shadow-2xl w-11/12 h-5/6 flex flex-col" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between p-4 border-b">
+                <h3 id="modal-title" class="text-lg font-bold">Relatório</h3>
+                <button onclick="closeModal()" class="px-4 py-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    ✕ Fechar
+                </button>
+            </div>
+            <div class="flex-1 overflow-hidden">
+                <iframe id="report-iframe" class="w-full h-full border-0"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+    <script src="/static/js/main.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,58 @@
+{
+  "metadata": {
+    "nome": "prompt_orientacoes_praticas",
+    "versao": 2,
+    "criado_em": "2025-12-09T00:00:00",
+    "modificado_em": "2025-12-09T00:00:00",
+    "autor": "system"
+  },
+  "parametros": {
+    "modelo": "models/gemini-1.5-flash-latest",
+    "temperatura": 0.3,
+    "top_p": 0.9,
+    "max_tokens": 2048,
+    "candidate_count": 1,
+    "timeout": 30
+  },
+  "estrutura": {
+    "contexto": "Analise a transcrição em português e produza um resumo com foco em orientações práticas e aplicáveis imediatamente.",
+    "formato_saida": "Retorne JSON com: resumo_conciso, pontos_chave[], topicos[], orientacoes[{passo,acao,beneficio}], secoes[{titulo,inicio,fim,conteudo}].",
+    "diretivas": [
+      "Priorize recomendações objetivas e passo a passo",
+      "Mantenha fidelidade ao conteúdo",
+      "Evite redundâncias e jargões",
+      "Evidencie benefícios e resultados esperados"
+    ],
+    "pos_processamento": "Evite PII e termos sensíveis; não inclua chaves ou credenciais."
+  },
+  "componentes": [
+    {
+      "id": "blocos",
+      "descricao": "Inclui blocos segmentados com timestamps",
+      "conteudo": "BLOCOS:\n{blocos}",
+      "ativo": true
+    },
+    {
+      "id": "transcricao",
+      "descricao": "Inclui transcrição completa",
+      "conteudo": "TRANSCRICAO:\n{texto}",
+      "ativo": true
+    },
+    {
+      "id": "foco_orientacoes",
+      "descricao": "Forca orientacoes praticas",
+      "conteudo": "GERE orientacoes praticas no formato orientacoes[{passo,acao,beneficio}] com pelo menos 5 itens, diretamente aplicaveis.",
+      "ativo": true
+    }
+  ],
+  "historico": [
+    {
+      "versao": 2,
+      "data": "2025-12-09T19:34:34",
+      "autor": "system",
+      "alteracoes": "versao orientacoes v2",
+      "motivo": "versao orientacoes v2"
+    }
+  ],
+  "desempenho": []
+}

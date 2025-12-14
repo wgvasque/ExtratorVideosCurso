@@ -1,0 +1,47 @@
+version: 2
+updates:
+  # Atualizar dependências Python principais
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      # Ignorar atualizações maiores (breaking changes)
+      - dependency-name: "playwright"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "faster-whisper"
+        update-types: ["version-update:semver-major"]
+
+  # Atualizar dependências da interface web
+  - package-ecosystem: "pip"
+    directory: "/web_interface"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "web-interface"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # Atualizar GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
