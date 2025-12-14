@@ -1,5 +1,10 @@
 # Extrator, Transcrição e Resumo
 
+[![CI Tests](https://github.com/wgvasque/ExtratorVideosCurso/workflows/CI%20-%20Testes%20e%20Validação/badge.svg)](https://github.com/wgvasque/ExtratorVideosCurso/actions/workflows/ci.yml)
+[![Linting](https://github.com/wgvasque/ExtratorVideosCurso/workflows/Linting%20e%20Formatação/badge.svg)](https://github.com/wgvasque/ExtratorVideosCurso/actions/workflows/lint.yml)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## Estrutura de Arquivos
 - `logs/` : armazena logs em JSON de cada execução
   - Hierarquia: `logs/<dominio>/<id>/<run_id>.process.log.json`
