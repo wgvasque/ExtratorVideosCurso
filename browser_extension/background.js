@@ -390,8 +390,17 @@ async function sendToAPI(capture) {
     if (response.ok) {
       const data = await response.json();
       console.log('[Video Extractor] Enviado para API com sucesso');
-      if (data.autoProcessStarted) {
-        console.log('[Video Extractor] 🚀 Auto-processamento iniciado!');
+
+      // Se auto-process está ativado, iniciar processamento automaticamente
+      if (autoProcess) {
+        console.log('[Video Extractor] 🚀 Auto-processamento ativado! Iniciando...');
+
+        // Iniciar polling (mesmo comportamento do botão "Processar")
+        startPolling(capture.pageUrl);
+
+        console.log('[Video Extractor] ✅ Processamento iniciado automaticamente');
+      } else if (data.autoProcessStarted) {
+        console.log('[Video Extractor] 🚀 Auto-processamento iniciado pela API');
       }
     } else {
       console.warn('[Video Extractor] Falha ao enviar para API:', response.status);
