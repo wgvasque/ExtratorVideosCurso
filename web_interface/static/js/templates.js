@@ -347,7 +347,7 @@ function templateV2SolarPop(reportData) {
                        font-size: 14px;
                        background: white;
                        cursor: pointer;
-                       font-family: 'Inter', sans-serif;">
+                        font-family: 'Inter', sans-serif;">
             <option value="">⏳ Carregando prompts...</option>
         </select>
         
@@ -375,13 +375,13 @@ function templateV2SolarPop(reportData) {
                     const option = document.createElement('option');
                     option.value = prompt.name;
                     const icon = prompt.valid ? '✅' : '❌';
-                    option.textContent = \`\${icon} \${prompt.name}\`;
+                    option.textContent = icon + ' ' + prompt.name;
                     option.disabled = !prompt.valid;
                     selector.appendChild(option);
                 });
                 
-                // Selecionar o prompt usado atualmente (se estiver no meta)
-                const currentPrompt = '${data.prompt_model_usado || data._modelo || ''}';
+                // Selecionar o prompt usado atualmente (passado do Python)
+                const currentPrompt = '${htmlEscape(str(data.get("prompt_model_usado") or data.get("_modelo") or ""))}';
                 if (currentPrompt) {
                     Array.from(selector.options).forEach(opt => {
                         if (opt.value === currentPrompt) opt.selected = true;
@@ -396,36 +396,36 @@ function templateV2SolarPop(reportData) {
         </script>
     </div>
     
-    <!-- Modal de Reprocessamento -->
+    < !--Modal de Reprocessamento-- >
     <div id="reprocess-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center;">
         <div style="background: white; border: 4px solid var(--ink); padding: 40px; max-width: 500px; width: 90%; box-shadow: 8px 8px 0px 0px var(--ink); text-align: center;">
             <h2 style="font-family: 'Space Grotesk', sans-serif; margin-bottom: 20px;">🔄 REPROCESSANDO</h2>
-            
+
             <div id="modal-status" style="font-size: 16px; margin-bottom: 20px; color: var(--ink);">
                 Iniciando reprocessamento...
             </div>
-            
+
             <!-- Cronômetro -->
             <div id="modal-timer" style="font-size: 48px; font-weight: bold; font-family: 'Space Grotesk', sans-serif; color: var(--accent); margin: 20px 0;">
                 00:00
             </div>
-            
+
             <!-- Barra de progresso -->
             <div style="background: var(--base); border: 2px solid var(--ink); height: 30px; margin: 20px 0; position: relative;">
                 <div id="modal-progress" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); height: 100%; width: 0%; transition: width 0.5s;"></div>
             </div>
-            
+
             <!-- Log de progresso -->
             <div id="modal-log" style="background: var(--ink); color: var(--sun); padding: 15px; font-family: monospace; font-size: 12px; text-align: left; max-height: 150px; overflow-y: auto; margin-bottom: 20px;">
                 [INFO] Aguardando início do processamento...
             </div>
-            
+
             <button id="modal-close-btn" onclick="closeReprocessModal()" style="display: none; background: var(--sun); border: 2px solid var(--ink); padding: 12px 24px; font-weight: bold; cursor: pointer; box-shadow: 3px 3px 0px 0px var(--ink);">
                 ✅ Fechar e Recarregar
             </button>
         </div>
     </div>
-    ` : ''}
+` : ''}
     `;
 
     // Seção de Erros (se houver)
