@@ -409,10 +409,44 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     }
   } else if (request.action === 'refreshMetadata') {
     // Popup solicitou atualização de metadados
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: 'extractMetadata' }, (response) => {
-          if (response && response.success && response.metadata && lastManifest) {
+        const tabId = tabs[0].id;
+
+        // Tentar enviar mensagem para content script
+        chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, async (response) => {
+          // Se houver erro (content script não carregado), injetar manualmente
+          if (chrome.runtime.lastError) {
+            console.log('[Video Extractor] Content script não encontrado, injetando...');
+
+            try {
+              // Injetar content script manualmente
+              await chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                files: ['content.js']
+              });
+
+              // Aguardar um pouco para o script carregar
+              setTimeout(() => {
+                // Tentar novamente
+                chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (response2) => {
+                  if (response2 && response2.success && response2.metadata && lastManifest) {
+                    lastManifest.pageTitle = response2.metadata.pageTitle || lastManifest.pageTitle;
+                    lastManifest.videoTitle = response2.metadata.videoTitle || '';
+                    lastManifest.supportMaterials = response2.metadata.supportMaterials || [];
+                    chrome.storage.local.set({ lastManifest });
+                    sendResponse({ success: true, metadata: response2.metadata });
+                  } else {
+                    sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
+                  }
+                });
+              }, 500);
+            } catch (e) {
+              console.error('[Video Extractor] Erro ao injetar script:', e);
+              sendResponse({ success: false, error: 'Erro ao injetar content script: ' + e.message });
+            }
+          } else if (response && response.success && response.metadata && lastManifest) {
+            // Content script já estava carregado
             lastManifest.pageTitle = response.metadata.pageTitle || lastManifest.pageTitle;
             lastManifest.videoTitle = response.metadata.videoTitle || '';
             lastManifest.supportMaterials = response.metadata.supportMaterials || [];
