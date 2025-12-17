@@ -555,12 +555,10 @@
         <div class="card-title">🎯 Modelo de Prompt</div>
         <select id="promptModelSelect"
           style="width: 100%; padding: 8px; border: 2px solid var(--ink); border-radius: 8px; font-size: 11px; font-weight: 600; background: white; cursor: pointer;">
-          <option value="modelo2" selected>📊 Modelo 2 (Padrão - Rápido)</option>
-          <option value="modelo4">🎯 Modelo 4 (Híbrido - Preciso)</option>
+          <option value="">⏳ Carregando prompts...</option>
         </select>
-        <div style="font-size: 9px; color: #666; margin-top: 6px; line-height: 1.3;">
-          <strong>Modelo 2:</strong> Velocidade + Custo menor<br>
-          <strong>Modelo 4:</strong> Precisão máxima + Validação
+        <div id="promptInfo" style="font-size: 9px; color: #666; margin-top: 6px; line-height: 1.3; display: none;">
+          <!-- Informações do prompt selecionado serão exibidas aqui -->
         </div>
       </div>
 

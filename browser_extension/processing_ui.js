@@ -117,9 +117,15 @@ async function processVideoWithUI(pageUrl, manifestUrl, button) {
     button.textContent = '⏳ Processando...';
 
     try {
-        // Capturar modelo de prompt selecionado
+        // Capturar modelo de prompt selecionado (do select ou do storage)
         const promptModelSelect = document.getElementById('promptModelSelect');
-        const promptModel = promptModelSelect ? promptModelSelect.value : 'modelo2';
+        let promptModel = promptModelSelect ? promptModelSelect.value : '';
+
+        // Se não tiver valor no select, tentar pegar do storage
+        if (!promptModel) {
+            const saved = await chrome.storage.local.get(['selectedPrompt']);
+            promptModel = saved.selectedPrompt || '';
+        }
 
         console.log('[Extension] Modelo de prompt selecionado:', promptModel);
 
@@ -133,7 +139,7 @@ async function processVideoWithUI(pageUrl, manifestUrl, button) {
             body: JSON.stringify({
                 urls: [pageUrl],
                 manifestUrl: manifestUrl,  // Passa o JWT manifest diretamente
-                promptModel: promptModel    // Envia modelo selecionado
+                prompt_template: promptModel || undefined  // Envia prompt selecionado (nome completo do arquivo)
             })
         });
 

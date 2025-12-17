@@ -96,8 +96,107 @@ function formatTime(timestamp) {
     return date.toLocaleString('pt-BR');
 }
 
+// Carregar prompts disponíveis da API
+async function loadPrompts() {
+    const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+    const selector = document.getElementById('promptModelSelect');
+    const promptInfo = document.getElementById('promptInfo');
+
+    try {
+        let prompts = null;
+        for (const host of hosts) {
+            try {
+                const response = await fetch(`${host}/prompts`, { cache: 'no-store' });
+                if (response.ok) {
+                    const data = await response.json();
+                    prompts = data.prompts;
+                    break;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        if (!prompts || prompts.length === 0) {
+            selector.innerHTML = '<option value="">❌ Erro ao carregar prompts</option>';
+            return;
+        }
+
+        // Carregar seleção salva
+        const saved = await chrome.storage.local.get(['selectedPrompt']);
+        const savedPrompt = saved.selectedPrompt;
+
+        // Popular dropdown
+        selector.innerHTML = '';
+        prompts.forEach(prompt => {
+            const option = document.createElement('option');
+            option.value = prompt.name;
+            const icon = prompt.valid ? '✅' : '❌';
+            option.textContent = `${icon} ${prompt.name}`;
+            option.disabled = !prompt.valid;
+            if (savedPrompt === prompt.name || (!savedPrompt && prompt.valid)) {
+                option.selected = true;
+            }
+            selector.appendChild(option);
+        });
+
+        // Atualizar info do prompt selecionado
+        selector.addEventListener('change', async () => {
+            const selected = selector.value;
+            await chrome.storage.local.set({ selectedPrompt: selected });
+            updatePromptInfo(selected);
+        });
+
+        // Mostrar info inicial
+        updatePromptInfo(selector.value);
+
+    } catch (error) {
+        console.error('Erro ao carregar prompts:', error);
+        selector.innerHTML = '<option value="">❌ Erro de conexão</option>';
+    }
+}
+
+// Atualizar informações do prompt selecionado
+async function updatePromptInfo(promptName) {
+    const promptInfo = document.getElementById('promptInfo');
+
+    if (!promptName) {
+        promptInfo.style.display = 'none';
+        return;
+    }
+
+    const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+
+    try {
+        for (const host of hosts) {
+            try {
+                const response = await fetch(`${host}/prompts/${encodeURIComponent(promptName)}`, { cache: 'no-store' });
+                if (response.ok) {
+                    const details = await response.json();
+                    promptInfo.style.display = 'block';
+                    promptInfo.innerHTML = `
+                        <strong>${details.validation.valid ? '✅' : '❌'} ${details.name}</strong><br>
+                        ${details.metadata.description || 'Sem descrição'}
+                        ${details.validation.valid ? '' : '<br><span style="color: #f44336;">⚠️ Prompt inválido</span>'}
+                    `;
+                    return;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+        promptInfo.style.display = 'none';
+    } catch (error) {
+        console.error('Erro ao carregar info do prompt:', error);
+        promptInfo.style.display = 'none';
+    }
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
+    // Carregar prompts disponíveis
+    loadPrompts();
+
     // Refresh button
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
