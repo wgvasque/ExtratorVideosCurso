@@ -355,6 +355,7 @@ function templateV2SolarPop(reportData) {
         // Carregar prompts disponíveis para reprocessamento
         (async function loadReprocessPrompts() {
             const selector = document.getElementById('reprocess-model-select');
+            console.log('[DEBUG] Seletor encontrado:', selector);
             if (!selector) return;
             
             try {
@@ -362,14 +363,20 @@ function templateV2SolarPop(reportData) {
                 const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
                 let data = null;
                 
+                console.log('[DEBUG] Tentando carregar prompts de:', hosts);
+                
                 for (const host of hosts) {
                     try {
+                        console.log('[DEBUG] Tentando host:', host);
                         const response = await fetch(host + '/prompts', { cache: 'no-store' });
+                        console.log('[DEBUG] Resposta de', host, ':', response.status);
                         if (response.ok) {
                             data = await response.json();
+                            console.log('[DEBUG] Dados recebidos:', data);
                             break;
                         }
                     } catch (e) {
+                        console.log('[DEBUG] Erro em', host, ':', e.message);
                         continue;
                     }
                 }
@@ -377,6 +384,7 @@ function templateV2SolarPop(reportData) {
                 if (!data) throw new Error('API indisponível');
                 
                 const prompts = data.prompts || [];
+                console.log('[DEBUG] Prompts encontrados:', prompts.length);
                 
                 if (prompts.length === 0) {
                     selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
@@ -394,6 +402,8 @@ function templateV2SolarPop(reportData) {
                     selector.appendChild(option);
                 });
                 
+                console.log('[DEBUG] Seletor populado com sucesso!');
+                
                 // Selecionar o prompt usado atualmente (não disponível no client-side)
                 // O prompt usado está visível no badge do header do relatório
                 const currentPrompt = '';
@@ -404,7 +414,7 @@ function templateV2SolarPop(reportData) {
                 }
                 
             } catch (error) {
-                console.error('Erro ao carregar prompts:', error);
+                console.error('[DEBUG] Erro ao carregar prompts:', error);
                 selector.innerHTML = '<option value="">❌ Erro ao carregar</option>';
             }
         })();
