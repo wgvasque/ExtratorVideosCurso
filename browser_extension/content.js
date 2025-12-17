@@ -66,6 +66,8 @@ function extractSupportMaterials() {
         }
     });
 
+    console.log('[Video Extractor] Materiais encontrados antes da deduplicação:', materials.map(m => ({ url: m.url, text: m.text })));
+
     // Remover duplicatas por URL base (ignorando query params)
     // Se mesma URL, manter o texto mais descritivo (mais curto e sem "...")
     const urlMap = new Map();
