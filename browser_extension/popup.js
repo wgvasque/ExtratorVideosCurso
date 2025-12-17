@@ -170,11 +170,14 @@ function loadManifests() {
                     if (tabs[0]) {
                         chrome.tabs.reload(tabs[0].id);
 
-                        // Mostrar mensagem e fechar popup após 500ms
+                        // Mostrar modal informativo e fechar popup
                         setTimeout(() => {
-                            alert('✅ Página recarregada!\n\n📌 Aguarde o vídeo carregar e abra o popup novamente para ver o m3u8 capturado.');
-                            window.close();
-                        }, 500);
+                            showInfoModal(
+                                '✅ Página Recarregada!',
+                                '📌 Aguarde o vídeo carregar e abra o popup novamente para ver o m3u8 capturado.',
+                                () => window.close()
+                            );
+                        }, 300);
                     }
                 });
             });
@@ -425,6 +428,47 @@ function showConfirmModal(message, onConfirm) {
 
     confirmBtn.addEventListener('click', handleConfirm);
     cancelBtn.addEventListener('click', handleCancel);
+    modal.addEventListener('click', handleOverlayClick);
+}
+
+// Função para mostrar modal informativo (sem botão cancelar)
+function showInfoModal(title, message, onOk) {
+    const modal = document.getElementById('confirmModal');
+    const modalTitle = document.querySelector('.modal-title');
+    const modalMessage = document.getElementById('modalMessage');
+    const confirmBtn = document.getElementById('modalConfirm');
+    const cancelBtn = document.getElementById('modalCancel');
+
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    confirmBtn.textContent = '✅ OK';
+    cancelBtn.style.display = 'none'; // Esconder botão cancelar
+    modal.style.display = 'flex';
+
+    // Handler para OK
+    const handleOk = () => {
+        modal.style.display = 'none';
+        cancelBtn.style.display = ''; // Restaurar botão cancelar
+        confirmBtn.textContent = '✅ Confirmar'; // Restaurar texto
+        modalTitle.textContent = 'Confirmar Ação'; // Restaurar título
+        if (onOk) onOk();
+        cleanup();
+    };
+
+    // Cleanup listeners
+    const cleanup = () => {
+        confirmBtn.removeEventListener('click', handleOk);
+        modal.removeEventListener('click', handleOverlayClick);
+    };
+
+    // Handler para clicar fora do modal
+    const handleOverlayClick = (e) => {
+        if (e.target === modal) {
+            handleOk();
+        }
+    };
+
+    confirmBtn.addEventListener('click', handleOk);
     modal.addEventListener('click', handleOverlayClick);
 }
 
