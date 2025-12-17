@@ -370,6 +370,14 @@ async function sendToAPI(capture) {
     const result = await chrome.storage.local.get(['autoProcess']);
     const autoProcess = result.autoProcess || false;
 
+    console.log('[Video Extractor] 🔍 Auto-process status:', autoProcess);
+    console.log('[Video Extractor] 📦 Capture data:', {
+      pageUrl: capture.pageUrl,
+      manifestUrl: capture.manifestUrl?.slice(0, 50) + '...',
+      videoTitle: capture.videoTitle,
+      materials: capture.supportMaterials?.length || 0
+    });
+
     const payload = {
       ...capture,
       autoProcess: autoProcess
