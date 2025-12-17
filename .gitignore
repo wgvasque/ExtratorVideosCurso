@@ -167,6 +167,7 @@ test_*.py
 *.crt
 .env.local
 .env.production
+accounts.json
 
 # Arquivos de sistema
 Thumbs.db

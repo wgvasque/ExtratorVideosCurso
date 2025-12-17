@@ -1,12 +1,84 @@
 """
 Cliente para integração com OpenRouter.ai
 Permite usar múltiplos modelos LLM através de uma única API
+Agora utiliza configuração unificada do prompt_padrao.json
 """
 import os
 import requests
 import json
 import re
 from typing import Dict, List, Optional
+
+# Importar load_prompt do gemini_client para configuração unificada
+def _load_prompt_config():
+    """
+    Carrega configuração do prompt JSON (mesmo usado pelo Gemini)
+    Usa PROMPT_PATH, PROMPT_MODEL, PROMPT_MODELO2_PATH e PROMPT_MODELO4_PATH
+    """
+    # Verificar override direto
+    direct_path = os.getenv("PROMPT_PATH")
+    if direct_path:
+        try:
+            with open(direct_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    
+    # Verificar seleção de modelo
+    prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
+    
+    if prompt_model in ["modelo4", "model4", "4", "hibrido", "hybrid"]:
+        default_path = os.getenv("PROMPT_MODELO4_PATH", "prompt_modelo4.json")
+    else:
+        default_path = os.getenv("PROMPT_MODELO2_PATH", "prompt_padrao.json")
+    
+    try:
+        with open(default_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        # Fallback
+        try:
+            with open("prompt_padrao.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+def _build_prompt_from_config(cfg: dict, text: str, blocks: List[dict], use_blocks: bool) -> str:
+    """Constrói prompt a partir da configuração JSON unificada"""
+    if not cfg:
+        # Fallback para prompt hardcoded se não houver config
+        return _build_fallback_prompt(text, blocks, use_blocks)
+    
+    # Usar mesma função do gemini_client para garantir consistência
+    try:
+        from .gemini_client import build_modelo2_prompt
+        return build_modelo2_prompt(cfg, text, blocks)
+    except Exception:
+        # Fallback se importação falhar
+        return _build_fallback_prompt(text, blocks, use_blocks)
+
+
+def _build_fallback_prompt(text: str, blocks: List[dict], use_blocks: bool) -> str:
+    """Prompt de fallback se não houver configuração JSON"""
+    prompt_parts = [
+        "Analise a transcrição em português e produza um resumo estruturado.",
+        "",
+        "Retorne APENAS um objeto JSON válido com os seguintes campos:",
+        "- resumo_conciso: string com 200-300 palavras resumindo os principais tópicos",
+        "- pontos_chave: array com 7-15 strings, cada uma sendo um ponto-chave numerado",
+        "- topicos: array com 3-7 strings representando os tópicos principais",
+        "- orientacoes: array com 7-15 objetos, cada um com {passo, acao, beneficio}",
+        "- secoes: array com objetos {titulo, inicio, fim, conteudo}",
+        "",
+        "IMPORTANTE:",
+        "- Mantenha fidelidade ao conteúdo original",
+        "- Evite redundâncias e jargões",
+        "- Priorize recomendações práticas e acionáveis",
+        "",
+        "TRANSCRIÇÃO:",
+        text,
+    ]
+    return "\n".join(prompt_parts)
 
 def summarize_with_openrouter(
     text: str, 
@@ -37,44 +109,21 @@ def summarize_with_openrouter(
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY não configurada no arquivo .env")
     
-    # Determinar modelo
+    # Carregar configuração unificada do JSON
+    cfg = _load_prompt_config()
+    parametros = cfg.get("parametros", {}) if cfg else {}
+    
+    # Determinar modelo (prioridade: argumento > JSON > .env > padrão)
     if model is None:
-        model = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+        model = parametros.get("modelo_openrouter") or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
     
-    # Construir prompt
-    prompt_parts = [
-        "Analise a transcrição em português e produza um resumo estruturado.",
-        "",
-        "Retorne APENAS um objeto JSON válido com os seguintes campos:",
-        "- resumo_conciso: string com 200-300 palavras resumindo os principais tópicos",
-        "- pontos_chave: array com 7-15 strings, cada uma sendo um ponto-chave numerado (ex: '1. Primeiro ponto')",
-        "- topicos: array com 3-7 strings representando os tópicos principais",
-        "- orientacoes: array com 7-15 objetos, cada um com {passo: number, acao: string, beneficio: string}",
-        "- secoes: array com objetos {titulo: string, inicio: number, fim: number, conteudo: string}",
-        "",
-        "IMPORTANTE:",
-        "- Mantenha fidelidade ao conteúdo original",
-        "- Evite redundâncias e jargões",
-        "- Priorize recomendações práticas e acionáveis",
-        "- Evidencie benefícios e resultados esperados",
-        "",
-    ]
+    # Construir prompt usando configuração unificada
+    prompt = _build_prompt_from_config(cfg, text, blocks, use_blocks)
     
-    # Adicionar blocos se solicitado
-    if use_blocks and blocks:
-        prompt_parts.append("BLOCOS SEGMENTADOS:")
-        # Limitar a 10 blocos para não exceder tamanho
-        limited_blocks = blocks[:10] if len(blocks) > 10 else blocks
-        for block in limited_blocks:
-            prompt_parts.append(f"[{block.get('inicio', 0):.1f}s - {block.get('fim', 0):.1f}s]: {block.get('conteudo', '')[:200]}")
-        prompt_parts.append("")
-    
-    prompt_parts.extend([
-        "TRANSCRIÇÃO COMPLETA:",
-        text,
-    ])
-    
-    prompt = "\n".join(prompt_parts)
+    # Obter parâmetros (prioridade: JSON > .env > padrão)
+    temperatura = parametros.get("temperatura") or float(os.getenv("OPENROUTER_TEMPERATURE", "0.3"))
+    max_tokens = parametros.get("max_tokens") or int(os.getenv("OPENROUTER_MAX_TOKENS", "4096"))
+    timeout = parametros.get("timeout") or int(os.getenv("OPENROUTER_TIMEOUT", "60"))
     
     # Preparar requisição
     headers = {
@@ -96,8 +145,8 @@ def summarize_with_openrouter(
                 "content": prompt
             }
         ],
-        "temperature": float(os.getenv("OPENROUTER_TEMPERATURE", "0.3")),
-        "max_tokens": int(os.getenv("OPENROUTER_MAX_TOKENS", "4096")),
+        "temperature": temperatura,
+        "max_tokens": max_tokens,
     }
     
     # Adicionar response_format se o modelo suportar
@@ -129,29 +178,55 @@ def summarize_with_openrouter(
         
         # Parse JSON da resposta
         try:
-            # Limpar markdown code blocks se existirem
-            clean_text = raw_text.strip()
-            if clean_text.startswith("```"):
-                clean_text = re.sub(r"^```[a-zA-Z]*\n", "", clean_text)
-                clean_text = re.sub(r"\n```$", "", clean_text)
+            # Usar mesma função de parse do gemini_client
+            # Detectar modelo e usar parser apropriado
+            prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
             
-            # Tentar parse direto
-            try:
-                data = json.loads(clean_text)
-            except json.JSONDecodeError:
-                # Tentar extrair JSON do texto
-                match = re.search(r'\{[\s\S]*\}', clean_text)
-                if match:
-                    data = json.loads(match.group(0))
-                else:
-                    raise ValueError("Não foi possível extrair JSON da resposta")
+            if prompt_model in ["modelo4", "model4", "4", "hibrido", "hybrid"]:
+                from .gemini_client import parse_modelo4_response
+                data = parse_modelo4_response(raw_text)
+            else:
+                from .gemini_client import parse_modelo2_response
+                data = parse_modelo2_response(raw_text)
             
-            # Garantir campos obrigatórios
-            data.setdefault("resumo_conciso", "")
+            if not data:
+                # Fallback para parse manual
+                clean_text = raw_text.strip()
+                if clean_text.startswith("```"):
+                    clean_text = re.sub(r"^```[a-zA-Z]*\n", "", clean_text)
+                    clean_text = re.sub(r"\n```$", "", clean_text)
+                
+                try:
+                    data = json.loads(clean_text)
+                except json.JSONDecodeError:
+                    match = re.search(r'\{[\s\S]*\}', clean_text)
+                    if match:
+                        data = json.loads(match.group(0))
+                    else:
+                        raise ValueError("Não foi possível extrair JSON da resposta")
+            
+            # Garantir campos obrigatórios do Modelo 2
+            data.setdefault("resumo_executivo", data.get("resumo_conciso", ""))
+            data.setdefault("objetivos_aprendizagem", [])
+            data.setdefault("conceitos_fundamentais", [])
+            data.setdefault("estrutura_central", [])
+            data.setdefault("exemplos", [])
+            data.setdefault("ferramentas_metodos", [])
+            data.setdefault("orientacoes_praticas", data.get("orientacoes", {}))
+            data.setdefault("abordagem_pedagogica", {})
+            data.setdefault("ideias_chave", [])
+            data.setdefault("pontos_memorizacao", {})
+            data.setdefault("citacoes_marcantes", [])
+            data.setdefault("proximos_passos", {})
+            data.setdefault("preparacao_proxima_aula", "")
+            data.setdefault("materiais_apoio", [])
+            
+            # Manter campos legados para retrocompatibilidade
+            data.setdefault("resumo_conciso", data.get("resumo_executivo", ""))
             data.setdefault("pontos_chave", [])
             data.setdefault("topicos", [])
-            data.setdefault("orientacoes", [])
             data.setdefault("secoes", [])
+
             
             return {
                 "data": data,
@@ -276,6 +351,7 @@ def get_model_info(model: str) -> Dict:
 def validate_summary_quality(data: Dict) -> tuple[bool, str]:
     """
     Valida se o resumo gerado tem qualidade mínima aceitável
+    Suporta Modelo 2 (14 seções) e formato legado
     
     Args:
         data: Dicionário com dados do resumo
@@ -287,75 +363,110 @@ def validate_summary_quality(data: Dict) -> tuple[bool, str]:
     if not data:
         return False, "Dados vazios"
     
-    resumo = data.get("resumo_conciso", "")
+    # Suportar Modelo 2/4 e formato legado
+    resumo = data.get("resumo_executivo") or data.get("resumo_conciso", "")
     pontos = data.get("pontos_chave", [])
-    orientacoes = data.get("orientacoes", [])
+    objetivos = data.get("objetivos_aprendizagem", [])  # Modelo 2/4
+    orientacoes = data.get("orientacoes_praticas") or data.get("orientacoes", [])
     
     # Validar resumo
     resumo_words = len(resumo.split())
-    if resumo_words < 50:
-        return False, f"Resumo muito curto ({resumo_words} palavras, mínimo 50)"
+    if resumo_words < 20:  # Reduzido de 30 para 20
+        return False, f"Resumo muito curto ({resumo_words} palavras, mínimo 20)"
     
-    if resumo_words > 500:
-        return False, f"Resumo muito longo ({resumo_words} palavras, máximo 500)"
+    if resumo_words > 1000:  # Aumentado de 500 para 1000 (Modelo 4 pode ser mais longo)
+        return False, f"Resumo muito longo ({resumo_words} palavras, máximo 1000)"
     
-    # Validar pontos-chave
-    if len(pontos) < 3:
-        return False, f"Poucos pontos-chave ({len(pontos)}, mínimo 3)"
+    # Validar pontos-chave OU objetivos (mais flexível para Modelo 2/4)
+    # Aceitar se tiver pelo menos 1 ponto-chave OU 1 objetivo
+    total_pontos = len(pontos) + len(objetivos)
+    if total_pontos < 1:  # Reduzido de 2 para 1
+        return False, f"Sem pontos-chave ou objetivos ({total_pontos}, mínimo 1)"
     
-    # Validar orientações
-    if len(orientacoes) < 3:
-        return False, f"Poucas orientações ({len(orientacoes)}, mínimo 3)"
-    
-    # Validar estrutura das orientações
-    for i, orient in enumerate(orientacoes):
-        if not isinstance(orient, dict):
-            return False, f"Orientação {i+1} não é um objeto"
+    # Validar orientações (mais flexível para Modelo 2)
+    if isinstance(orientacoes, dict):
+        # Modelo 2: orientacoes_praticas é um objeto
+        total_orientacoes = 0
+        for key in ["acao_imediata", "acao_curto_prazo", "acao_medio_prazo"]:
+            if key in orientacoes:
+                items = orientacoes[key]
+                if isinstance(items, list):
+                    total_orientacoes += len(items)
         
-        if "acao" not in orient or not orient["acao"]:
-            return False, f"Orientação {i+1} sem ação"
+        # Orientações são opcionais - não falhar se não houver
+        # (alguns vídeos podem não ter orientações práticas)
+    elif isinstance(orientacoes, list):
+        # Formato legado: orientacoes é uma lista
+        # Também tornar opcional
+        if len(orientacoes) > 0:
+            # Validar estrutura das orientações apenas se houver
+            for i, orient in enumerate(orientacoes):
+                if not isinstance(orient, dict):
+                    return False, f"Orientação {i+1} não é um objeto"
+                
+                if "acao" not in orient or not orient["acao"]:
+                    return False, f"Orientação {i+1} sem ação"
     
     return True, "OK"
+
 
 
 def get_fallback_models() -> List[str]:
     """
     Retorna lista de modelos em ordem de prioridade para fallback
     
-    Ordem:
-    1. Modelos gratuitos (melhor qualidade primeiro)
-    2. Modelos pagos baratos
-    3. Modelos pagos premium
+    Detecta automaticamente se o prompt é complexo (modelo4) e usa
+    modelos premium mais capazes quando necessário.
+    
+    Prioridade:
+    1. modelos_fallback_premium (se prompt complexo + usar_premium_automaticamente)
+    2. modelos_fallback do prompt JSON
+    3. OPENROUTER_FALLBACK_MODELS do .env
+    4. Lista padrão hardcoded
     
     Returns:
         Lista de IDs de modelos
     """
-    # Configuração customizada do usuário
+    cfg = _load_prompt_config()
+    
+    # Detectar se é prompt complexo (modelo4 ou modelo3)
+    prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
+    is_complex_prompt = prompt_model in ["modelo4", "modelo3", "modelo_4", "modelo_3"]
+    
+    # Verificar se deve usar premium automaticamente para prompts complexos
+    if cfg and cfg.get("parametros"):
+        params = cfg["parametros"]
+        usar_premium = params.get("usar_premium_automaticamente", False)
+        
+        # Se é prompt complexo E deve usar premium automaticamente
+        if is_complex_prompt and usar_premium:
+            modelos_premium = params.get("modelos_fallback_premium")
+            if isinstance(modelos_premium, list) and len(modelos_premium) > 0:
+                print(f"[INFO] Prompt complexo ({prompt_model}) detectado - usando modelos premium")
+                return modelos_premium
+        
+        # Fallback normal: modelos_fallback do JSON
+        modelos_json = params.get("modelos_fallback")
+        if isinstance(modelos_json, list) and len(modelos_json) > 0:
+            return modelos_json
+    
+    # 2. Fallback: Configuração do .env
     custom_models = os.getenv("OPENROUTER_FALLBACK_MODELS", "")
     if custom_models:
         return [m.strip() for m in custom_models.split(",") if m.strip()]
     
-    # Lista padrão: gratuitos especializados primeiro, depois pagos
+    # 3. Lista padrão: gratuitos primeiro, depois pagos
     return [
-        # Tier 1: Gratuitos de alta qualidade (especializados para resumos)
+        # Tier 1: Gratuitos de alta qualidade
         "google/gemini-2.0-flash-exp:free",
         "meta-llama/llama-3.3-70b-instruct:free",
-        "deepseek/deepseek-v3-0324:free",  # Especializado em sumarização
+        "deepseek/deepseek-v3-0324:free",
         
-        # Tier 2: Gratuitos eficientes e novos
-        "meta-llama/llama-3.2-3b-instruct:free",  # Eficiente, 9T tokens
-        "cohere/command-r7b-12-2024:free",  # Novo (Dez 2024), RAG
-        "google/gemma-3-27b:free",  # Multimodal
-        
-        # Tier 3: Gratuitos especializados
-        "amazon/nova-2-lite:free",  # Multimodal, processa vídeos
-        "allenaai/olmo-3-32b-think:free",  # Raciocínio profundo
-        
-        # Tier 4: Pagos baratos (fallback se gratuitos falharem)
+        # Tier 2: Pagos baratos
         "openai/gpt-4o-mini",
         "anthropic/claude-3-haiku",
         
-        # Tier 5: Pagos premium (último recurso)
+        # Tier 3: Pagos premium
         "anthropic/claude-3.5-sonnet",
         "openai/gpt-4o",
     ]

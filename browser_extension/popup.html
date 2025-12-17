@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Video Processor Pro</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap"
+    rel="stylesheet">
+
+  <style>
+    :root {
+      --base: #FFF8E7;
+      --ink: #2D3436;
+      --accent: #FF6B6B;
+      --pop: #4ECDC4;
+      --sun: #FFE66D;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 420px;
+      min-height: 400px;
+      max-height: 600px;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--base);
+      color: var(--ink);
+      overflow-y: auto;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, var(--accent), #ff8a80);
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 3px solid var(--ink);
+    }
+
+    .header h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: white;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .header .version {
+      background: var(--sun);
+      color: var(--ink);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      border: 2px solid var(--ink);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid var(--ink);
+      background: white;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--ink);
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      background: var(--base);
+    }
+
+    .tab.active {
+      background: var(--sun);
+      border-bottom: 3px solid var(--accent);
+    }
+
+    /* Content */
+    .content {
+      padding: 12px;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Cards */
+    .card {
+      background: white;
+      border: 2px solid var(--ink);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 4px 4px 0px 0px var(--ink);
+    }
+
+    .card:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 6px 6px 0px 0px var(--accent);
+    }
+
+    .card-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Buttons */
+    .btn {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 11px;
+      box-shadow: 3px 3px 0px 0px var(--ink);
+      transition: all 0.1s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: 4px 4px 0px 0px var(--ink);
+    }
+
+    .btn:active {
+      transform: translate(1px, 1px);
+      box-shadow: 2px 2px 0px 0px var(--ink);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-secondary {
+      background: white;
+      color: var(--ink);
+    }
+
+    .btn-pop {
+      background: var(--pop);
+      color: var(--ink);
+    }
+
+    .btn-sun {
+      background: var(--sun);
+      color: var(--ink);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 10px;
+    }
+
+    .btn-full {
+      width: 100%;
+      justify-content: center;
+    }
+
+    /* Auto Process Toggle */
+    .toggle-container {
+      background: var(--base);
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .toggle-container input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .toggle-container label {
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Warning Box */
+    .warning-box {
+      background: #fff3cd;
+      border: 2px solid #856404;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 10px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Manifest Item */
+    .manifest-item {
+      background: white;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+    }
+
+    .manifest-item:hover {
+      border-color: var(--accent);
+    }
+
+    .manifest-domain {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      color: var(--accent);
+      font-size: 12px;
+    }
+
+    .manifest-url {
+      font-size: 10px;
+      color: #666;
+      word-break: break-all;
+      margin: 4px 0;
+      font-family: monospace;
+    }
+
+    .manifest-time {
+      font-size: 10px;
+      color: #999;
+    }
+
+    .manifest-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    /* Processing Section */
+    .processing-section {
+      background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+      border: 3px solid var(--ink);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .processing-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .processing-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 16px;
+      background: white;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--pop), var(--accent));
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .processing-timer {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--ink);
+      text-align: center;
+      padding: 8px;
+      background: white;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    .video-info {
+      background: white;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+
+    .video-info .label {
+      font-size: 10px;
+      color: #666;
+      font-weight: 600;
+    }
+
+    .video-info .url {
+      font-size: 10px;
+      color: var(--accent);
+      word-break: break-all;
+      font-family: monospace;
+    }
+
+    .processing-status {
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+    }
+
+    /* Terminal */
+    .terminal-toggle {
+      background: var(--ink);
+      color: var(--pop);
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: monospace;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .terminal-toggle:hover {
+      background: #444;
+    }
+
+    .terminal-output {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: 'Consolas', monospace;
+      font-size: 9px;
+      padding: 8px;
+      border-radius: 6px;
+      max-height: 100px;
+      overflow-y: auto;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+
+    .terminal-output .log-success {
+      color: #4CAF50;
+    }
+
+    .terminal-output .log-error {
+      color: #f44336;
+    }
+
+    .terminal-output .log-warning {
+      color: #ff9800;
+    }
+
+    .terminal-output .log-info {
+      color: #2196F3;
+    }
+
+    /* Library Section */
+    .library-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .library-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      background: var(--sun);
+      padding: 4px 12px;
+      border: 2px solid var(--ink);
+      display: inline-block;
+      transform: rotate(-1deg);
+    }
+
+    .search-input {
+      background: white;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      width: 120px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .report-item {
+      background: white;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+      box-shadow: 3px 3px 0px 0px var(--ink);
+      transition: all 0.2s;
+    }
+
+    .report-item:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 5px 5px 0px 0px var(--accent);
+    }
+
+    .report-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      color: var(--ink);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .report-meta {
+      font-size: 10px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .report-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 24px;
+      color: #999;
+    }
+
+    .empty-state .icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      font-size: 12px;
+    }
+
+    /* Result Success */
+    .result-success {
+      background: var(--pop);
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+      text-align: center;
+    }
+
+    .result-success h4 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 8px;
+      font-size: 9px;
+      color: #999;
+      border-top: 1px solid #eee;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--accent);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>🎥 Video Processor</h1>
+    <span class="version">EXT v2</span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="capture">📡 Captura</button>
+    <button class="tab" data-tab="library">📚 Biblioteca</button>
+  </div>
+
+  <div class="content">
+    <!-- CAPTURE TAB -->
+    <div id="tab-capture" class="tab-panel active">
+
+      <!-- Auto Process Toggle -->
+      <div class="toggle-container">
+        <input type="checkbox" id="autoProcessCheckbox">
+        <label for="autoProcessCheckbox">🚀 <strong>Auto-processar</strong> ao capturar vídeo</label>
+      </div>
+
+      <!-- Prompt Model Selector -->
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-title">🎯 Modelo de Prompt</div>
+        <select id="promptModelSelect"
+          style="width: 100%; padding: 8px; border: 2px solid var(--ink); border-radius: 8px; font-size: 11px; font-weight: 600; background: white; cursor: pointer;">
+          <option value="modelo2" selected>📊 Modelo 2 (Padrão - Rápido)</option>
+          <option value="modelo4">🎯 Modelo 4 (Híbrido - Preciso)</option>
+        </select>
+        <div style="font-size: 9px; color: #666; margin-top: 6px; line-height: 1.3;">
+          <strong>Modelo 2:</strong> Velocidade + Custo menor<br>
+          <strong>Modelo 4:</strong> Precisão máxima + Validação
+        </div>
+      </div>
+
+      <!-- Warning -->
+      <div class="warning-box">
+        ⚠️ <span>Tokens JWT expiram em 2-5 min. Processe logo após capturar!</span>
+      </div>
+
+      <!-- Processing Section -->
+      <div id="processing-section" class="processing-section" style="display: none;">
+        <div class="processing-header">
+          <span id="processing-title" class="processing-title">⏳ Processando...</span>
+        </div>
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div id="processing-timer" class="processing-timer">⏱ 00:00</div>
+        <div class="video-info">
+          <div class="label">📹 Processando:</div>
+          <div id="video-url" class="url">-</div>
+        </div>
+        <p id="processing-status" class="processing-status">Iniciando...</p>
+        <button id="terminal-toggle" class="terminal-toggle">🖥️ Mostrar Terminal</button>
+        <div id="terminal-output" class="terminal-output" style="display: none;"></div>
+
+        <div id="processing-result" class="result-success" style="display: none;">
+          <h4>✅ Processamento Concluído!</h4>
+          <button id="view-report-btn" class="btn btn-primary btn-full">📊 VER RELATÓRIO</button>
+        </div>
+      </div>
+
+      <!-- Manifests List -->
+      <div class="card-title">📡 Vídeos Capturados</div>
+      <div id="manifestList">
+        <div class="empty-state">
+          <div class="icon">🎬</div>
+          <p>Nenhum vídeo capturado ainda.<br>Acesse uma página com vídeo!</p>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; gap: 8px; margin-top: 12px;">
+        <button class="btn btn-secondary" id="clearBtn" style="flex: 1;">🗑️ Limpar</button>
+        <button class="btn btn-pop" id="refreshBtn" style="flex: 1;">🔄 Atualizar</button>
+      </div>
+    </div>
+
+    <!-- LIBRARY TAB -->
+    <div id="tab-library" class="tab-panel">
+      <div class="library-header">
+        <span class="library-title">BIBLIOTECA</span>
+        <input type="text" id="search-reports" class="search-input" placeholder="Buscar...">
+      </div>
+
+      <div id="reports-list">
+        <div class="empty-state">
+          <div class="icon">📚</div>
+          <p>Carregando relatórios...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    Video Processor Pro Extension • Solar Pop v2
+  </div>
+
+  <script src="popup.js"></script>
+  <script src="processing_ui.js"></script>
+  <script src="library.js"></script>
+</body>
+
+</html>

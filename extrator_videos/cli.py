@@ -4,6 +4,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from .extractor import extract
+from .credential_manager import get_credentials
 from .downloader import download_hls
 from .browser import BrowserSession
 
@@ -19,8 +20,12 @@ def main():
     p.add_argument("--senha", dest="senha", default=None)
     p.add_argument("--download", dest="download", default=None)
     args = p.parse_args()
-    email = args.email or os.getenv("EMAIL")
-    senha = args.senha or os.getenv("SENHA")
+    email_arg = args.email or os.getenv("EMAIL")
+    senha_arg = args.senha or os.getenv("SENHA")
+    
+    # Resolve credentials via manager
+    email, senha = get_credentials(args.url, email_arg, senha_arg)
+    
     res = extract(args.url, cookies_path=args.cookies, proxy=args.proxy, email=email, senha=senha)
     if args.download:
         target = None
