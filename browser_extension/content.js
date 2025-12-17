@@ -132,13 +132,25 @@ function extractSupportMaterials() {
 async function extractPageMetadata() {
     // Para hub.la, aguardar H1 carregar (SPA com carregamento dinâmico)
     if (window.location.hostname.includes('hub.la')) {
-        // Aguardar até 3 segundos para o H1 aparecer
+        // Aguardar até 3 segundos para o H1 ter conteúdo real (não vazio e não "Hubla")
         let attempts = 0;
-        while (attempts < 6 && !document.querySelector('h1')) {
+        let h1 = document.querySelector('h1');
+
+        while (attempts < 6) {
+            h1 = document.querySelector('h1');
+            const h1Text = h1?.textContent?.trim() || '';
+
+            // Parar se H1 tem conteúdo válido (não vazio e não é o título padrão da página)
+            if (h1Text && h1Text !== 'Hubla' && h1Text.length > 3) {
+                break;
+            }
+
             await new Promise(resolve => setTimeout(resolve, 500));
             attempts++;
         }
-        console.log('[Video Extractor] Hub.la - H1 encontrado após', attempts * 500, 'ms');
+
+        const finalH1 = h1?.textContent?.trim() || 'não encontrado';
+        console.log('[Video Extractor] Hub.la - H1 após', attempts * 500, 'ms:', finalH1);
     }
 
     const metadata = {
