@@ -24,7 +24,7 @@ function loadManifests() {
             const timeText = minutesAgo === 0 ? 'agora' : `${minutesAgo}min atrás`;
 
             // Metadados adicionais
-            const videoTitle = m.videoTitle || 'Título não detectado';
+            const videoTitle = m.videoTitle || m.pageTitle || m.domain || 'Título não detectado';
             const hasMaterials = m.supportMaterials && m.supportMaterials.length > 0;
             const materialsHtml = hasMaterials ? `
                 <div class="manifest-materials" style="margin-top: 8px; padding: 8px; background: #f0f9ff; border-left: 3px solid #0ea5e9; border-radius: 4px;">
