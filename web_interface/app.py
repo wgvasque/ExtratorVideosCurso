@@ -114,6 +114,9 @@ def view_report_standalone(domain, video_id):
                 const html = templateV2SolarPop(reportData);
                 document.getElementById('report-container').innerHTML = html;
                 
+                // Carregar prompts no seletor (executar após renderização)
+                setTimeout(loadPromptsInSelector, 100);
+                
             }} catch (error) {{
                 document.getElementById('report-container').innerHTML = `
                     <div class="error">
@@ -122,6 +125,61 @@ def view_report_standalone(domain, video_id):
                         <p><a href="/">← Voltar para a interface</a></p>
                     </div>
                 `;
+            }}
+        }}
+        
+        async function loadPromptsInSelector() {{
+            const selector = document.getElementById('reprocess-model-select');
+            console.log('[DEBUG] Seletor encontrado:', selector);
+            if (!selector) return;
+            
+            try {{
+                const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+                let data = null;
+                
+                console.log('[DEBUG] Tentando carregar prompts de:', hosts);
+                
+                for (const host of hosts) {{
+                    try {{
+                        console.log('[DEBUG] Tentando host:', host);
+                        const response = await fetch(host + '/prompts', {{ cache: 'no-store' }});
+                        console.log('[DEBUG] Resposta de', host, ':', response.status);
+                        if (response.ok) {{
+                            data = await response.json();
+                            console.log('[DEBUG] Dados recebidos:', data);
+                            break;
+                        }}
+                    }} catch (e) {{
+                        console.log('[DEBUG] Erro em', host, ':', e.message);
+                        continue;
+                    }}
+                }}
+                
+                if (!data) throw new Error('API indisponível');
+                
+                const prompts = data.prompts || [];
+                console.log('[DEBUG] Prompts encontrados:', prompts.length);
+                
+                if (prompts.length === 0) {{
+                    selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
+                    return;
+                }}
+                
+                selector.innerHTML = '';
+                prompts.forEach(prompt => {{
+                    const option = document.createElement('option');
+                    option.value = prompt.name;
+                    const icon = prompt.valid ? '✅' : '❌';
+                    option.textContent = icon + ' ' + prompt.name;
+                    option.disabled = !prompt.valid;
+                    selector.appendChild(option);
+                }});
+                
+                console.log('[DEBUG] Seletor populado com sucesso!');
+                
+            }} catch (error) {{
+                console.error('[DEBUG] Erro ao carregar prompts:', error);
+                selector.innerHTML = '<option value="">❌ Erro ao carregar</option>';
             }}
         }}
         
