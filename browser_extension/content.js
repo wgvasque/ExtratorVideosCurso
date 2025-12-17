@@ -129,7 +129,12 @@ function extractSupportMaterials() {
 }
 
 // Função principal para extrair todos os metadados
-function extractPageMetadata() {
+async function extractPageMetadata() {
+    // Para hub.la, aguardar 1 segundo para o conteúdo carregar (SPA)
+    if (window.location.hostname.includes('hub.la')) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
     const metadata = {
         pageUrl: window.location.href,
         pageTitle: document.title,
@@ -145,8 +150,16 @@ function extractPageMetadata() {
 // Listener para mensagens do background/popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'extractMetadata') {
-        const metadata = extractPageMetadata();
-        sendResponse({ success: true, metadata });
+        // Usar async/await para aguardar extração
+        extractPageMetadata().then(metadata => {
+            sendResponse({ success: true, metadata });
+        }).catch(error => {
+            console.error('[Video Extractor] Erro ao extrair metadados:', error);
+            sendResponse({ success: false, error: error.message });
+        });
+
+        // Retornar true para indicar resposta assíncrona
+        return true;
     }
     return true; // Manter canal aberto para resposta assíncrona
 });
