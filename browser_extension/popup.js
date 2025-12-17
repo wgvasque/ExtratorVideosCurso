@@ -6,20 +6,39 @@ function loadManifests() {
         const currentTabUrl = tabs[0]?.url || '';
 
         chrome.runtime.sendMessage({ action: 'getManifests' }, function (response) {
-            const manifests = response.manifests || [];
+            const allManifests = response.manifests || [];
             const listDiv = document.getElementById('manifestList');
 
-            if (manifests.length === 0) {
-                listDiv.innerHTML = `
+            // Filtrar apenas manifest da aba atual
+            const currentTabManifest = allManifests.find(m => m.pageUrl === currentTabUrl);
+            const otherTabsCount = allManifests.length - (currentTabManifest ? 1 : 0);
+
+            // Mostrar badge se houver vídeos em outras abas
+            const otherTabsBadge = otherTabsCount > 0 ? `
+                <div style="margin-bottom: 12px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 6px;">
+                    <div style="font-size: 12px; color: #856404; font-weight: 600;">
+                        📚 ${otherTabsCount} vídeo${otherTabsCount > 1 ? 's' : ''} capturado${otherTabsCount > 1 ? 's' : ''} em outra${otherTabsCount > 1 ? 's' : ''} aba${otherTabsCount > 1 ? 's' : ''}
+                    </div>
+                    <div style="font-size: 10px; color: #856404; margin-top: 4px;">
+                        Troque de aba para ver ${otherTabsCount > 1 ? 'os outros vídeos' : 'o outro vídeo'}
+                    </div>
+                </div>
+            ` : '';
+
+            if (!currentTabManifest) {
+                listDiv.innerHTML = otherTabsBadge + `
                 <div class="empty-state">
                     <div class="icon">🎬</div>
-                    <p>Nenhum vídeo capturado ainda.<br>Acesse uma página com vídeo!</p>
+                    <p>Nenhum vídeo capturado nesta aba.<br>Acesse uma página com vídeo!</p>
                 </div>
             `;
                 return;
             }
 
-            listDiv.innerHTML = manifests.map((m, index) => {
+            // Mostrar apenas manifest da aba atual
+            const manifests = [currentTabManifest];
+
+            listDiv.innerHTML = otherTabsBadge + manifests.map((m, index) => {
                 const capturedDate = new Date(m.timestamp);
                 const now = new Date();
                 const minutesAgo = Math.floor((now - capturedDate) / 60000);
