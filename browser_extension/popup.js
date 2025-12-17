@@ -352,14 +352,57 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearBtn = document.getElementById('clearBtn');
     if (clearBtn) {
         clearBtn.addEventListener('click', function () {
-            if (confirm('Limpar todos os manifests capturados?')) {
+            showConfirmModal('Limpar todos os manifests capturados?', () => {
                 chrome.runtime.sendMessage({ action: 'clearManifests' }, function () {
                     loadManifests();
                 });
-            }
+            });
         });
     }
 
     // Load manifests on popup open
     loadManifests();
 });
+
+// Função para mostrar modal de confirmação customizado
+function showConfirmModal(message, onConfirm) {
+    const modal = document.getElementById('confirmModal');
+    const modalMessage = document.getElementById('modalMessage');
+    const confirmBtn = document.getElementById('modalConfirm');
+    const cancelBtn = document.getElementById('modalCancel');
+
+    modalMessage.textContent = message;
+    modal.style.display = 'flex';
+
+    // Handler para confirmar
+    const handleConfirm = () => {
+        modal.style.display = 'none';
+        onConfirm();
+        cleanup();
+    };
+
+    // Handler para cancelar
+    const handleCancel = () => {
+        modal.style.display = 'none';
+        cleanup();
+    };
+
+    // Cleanup listeners
+    const cleanup = () => {
+        confirmBtn.removeEventListener('click', handleConfirm);
+        cancelBtn.removeEventListener('click', handleCancel);
+        modal.removeEventListener('click', handleOverlayClick);
+    };
+
+    // Handler para clicar fora do modal
+    const handleOverlayClick = (e) => {
+        if (e.target === modal) {
+            handleCancel();
+        }
+    };
+
+    confirmBtn.addEventListener('click', handleConfirm);
+    cancelBtn.addEventListener('click', handleCancel);
+    modal.addEventListener('click', handleOverlayClick);
+}
+
