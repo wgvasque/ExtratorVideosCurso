@@ -66,7 +66,16 @@ function extractSupportMaterials() {
         }
     });
 
-    console.log('[Video Extractor] Materiais encontrados antes da deduplicação:', materials.map(m => ({ url: m.url, text: m.text })));
+    // Filtrar links internos da mesma plataforma (outras aulas, etc)
+    const currentDomain = window.location.hostname;
+    const filteredMaterials = materials.filter(material => {
+        const materialUrl = new URL(material.url);
+        // Manter apenas links externos OU arquivos (PDFs, docs, etc)
+        return materialUrl.hostname !== currentDomain || material.type !== 'LINK';
+    });
+
+    console.log('[Video Extractor] Materiais após filtrar links internos:', filteredMaterials.length);
+    console.log('[Video Extractor] Materiais encontrados antes da deduplicação:', filteredMaterials.map(m => ({ url: m.url, text: m.text })));
 
     // Remover duplicatas por URL base (ignorando query params)
     // Se mesma URL, manter o texto mais descritivo (mais curto e sem "...")
