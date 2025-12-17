@@ -168,12 +168,13 @@ function loadManifests() {
                 // Recarregar a aba ativa
                 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                     if (tabs[0]) {
-                        chrome.tabs.reload(tabs[0].id, {}, () => {
-                            // Aguardar 2 segundos e recarregar manifests
-                            setTimeout(() => {
-                                loadManifests();
-                            }, 2000);
-                        });
+                        chrome.tabs.reload(tabs[0].id);
+
+                        // Mostrar mensagem e fechar popup após 500ms
+                        setTimeout(() => {
+                            alert('✅ Página recarregada!\n\n📌 Aguarde o vídeo carregar e abra o popup novamente para ver o m3u8 capturado.');
+                            window.close();
+                        }, 500);
                     }
                 });
             });
