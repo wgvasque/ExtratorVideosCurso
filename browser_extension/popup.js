@@ -23,15 +23,40 @@ function loadManifests() {
             const statusClass = isExpired ? 'expired' : (minutesAgo > 1 ? 'warning' : 'fresh');
             const timeText = minutesAgo === 0 ? 'agora' : `${minutesAgo}min atrás`;
 
+            // Metadados adicionais
+            const videoTitle = m.videoTitle || 'Título não detectado';
+            const hasMaterials = m.supportMaterials && m.supportMaterials.length > 0;
+            const materialsHtml = hasMaterials ? `
+                <div class="manifest-materials" style="margin-top: 8px; padding: 8px; background: #f0f9ff; border-left: 3px solid #0ea5e9; border-radius: 4px;">
+                    <strong style="font-size: 11px; color: #0369a1;">📎 Material de Apoio (${m.supportMaterials.length}):</strong>
+                    ${m.supportMaterials.slice(0, 3).map(mat => `
+                        <div style="font-size: 10px; margin-top: 4px;">
+                            <a href="${mat.url}" target="_blank" style="color: #0284c7; text-decoration: none;">
+                                ${mat.type} - ${mat.text.substring(0, 40)}${mat.text.length > 40 ? '...' : ''}
+                            </a>
+                        </div>
+                    `).join('')}
+                    ${m.supportMaterials.length > 3 ? `<div style="font-size: 10px; color: #666; margin-top: 4px;">+${m.supportMaterials.length - 3} mais...</div>` : ''}
+                </div>
+            ` : '';
+
             return `
                 <div class="manifest-item" style="border-left: 4px solid ${isExpired ? '#f44336' : (minutesAgo > 1 ? '#ff9800' : '#4CAF50')}">
                     <div class="manifest-domain">🌐 ${m.domain}</div>
+                    <div class="manifest-video-title" style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 13px;">
+                        🎬 ${videoTitle}
+                    </div>
                     <div class="manifest-url">${truncateUrl(m.manifestUrl)}</div>
                     <div class="manifest-time" style="color: ${isExpired ? '#f44336' : '#666'}">
                         📅 ${formatTime(m.timestamp)} (${timeText})
                         ${isExpired ? ' ⚠️ EXPIRADO' : ''}
                     </div>
-                    <div class="manifest-actions">
+                    ${materialsHtml}
+                    <div class="manifest-actions" style="margin-top: 10px;">
+                        <button class="btn btn-info btn-sm refresh-btn" 
+                                title="Atualizar metadados da página">
+                            🔄 Atualizar
+                        </button>
                         <button class="btn ${isExpired ? 'btn-secondary' : 'btn-primary'} btn-sm process-btn" 
                                 data-url="${m.pageUrl}" 
                                 data-manifest="${m.manifestUrl}"
@@ -48,6 +73,13 @@ function loadManifests() {
                 </div>
             `;
         }).join('');
+
+        // Event listeners para botões de atualizar
+        document.querySelectorAll('.refresh-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                refreshMetadata(this);
+            });
+        });
 
         // Event listeners para botões de copiar
         document.querySelectorAll('.test-btn').forEach(btn => {
@@ -81,6 +113,30 @@ function loadManifests() {
                 }
             });
         });
+    });
+}
+
+// Função para atualizar metadados
+function refreshMetadata(button) {
+    const originalText = button.innerHTML;
+    button.innerHTML = '⏳ Atualizando...';
+    button.disabled = true;
+
+    chrome.runtime.sendMessage({ action: 'refreshMetadata' }, (response) => {
+        if (response && response.success) {
+            button.innerHTML = '✅ Atualizado!';
+            setTimeout(() => {
+                loadManifests(); // Recarregar lista
+            }, 500);
+        } else {
+            button.innerHTML = '❌ Erro';
+            console.error('Erro ao atualizar:', response?.error);
+        }
+
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }, 2000);
     });
 }
 

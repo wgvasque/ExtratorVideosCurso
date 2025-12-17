@@ -275,12 +275,31 @@ function captureManifest(manifestUrl, tabId, source = 'unknown') {
         manifestUrl: manifestUrl,
         timestamp: new Date().toISOString(),
         domain: new URL(pageUrl).hostname,
-        source: source
+        source: source,
+        // Metadados da página (serão preenchidos pelo content script)
+        pageTitle: tab.title || '',
+        videoTitle: '',
+        supportMaterials: []
       };
 
       // Guardar somente o último manifest
       lastManifest = capture;
       chrome.storage.local.set({ lastManifest });
+
+      // Solicitar metadados do content script
+      chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (response) => {
+        if (response && response.success && response.metadata) {
+          // Atualizar capture com metadados
+          lastManifest.pageTitle = response.metadata.pageTitle || lastManifest.pageTitle;
+          lastManifest.videoTitle = response.metadata.videoTitle || '';
+          lastManifest.supportMaterials = response.metadata.supportMaterials || [];
+          chrome.storage.local.set({ lastManifest });
+          console.log('[Video Extractor] Metadados atualizados:', {
+            videoTitle: lastManifest.videoTitle,
+            materials: lastManifest.supportMaterials.length
+          });
+        }
+      });
 
       // Enviar para API local e atualizar badge
       if (isValidManifest) {
@@ -379,6 +398,35 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   } else if (request.action === 'stopPolling') {
     stopPolling();
     sendResponse({ success: true });
+  } else if (request.action === 'pageMetadataExtracted') {
+    // Content script enviou metadados automaticamente
+    if (lastManifest && request.metadata) {
+      lastManifest.pageTitle = request.metadata.pageTitle || lastManifest.pageTitle;
+      lastManifest.videoTitle = request.metadata.videoTitle || '';
+      lastManifest.supportMaterials = request.metadata.supportMaterials || [];
+      chrome.storage.local.set({ lastManifest });
+      console.log('[Video Extractor] Metadados recebidos automaticamente');
+    }
+  } else if (request.action === 'refreshMetadata') {
+    // Popup solicitou atualização de metadados
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, { action: 'extractMetadata' }, (response) => {
+          if (response && response.success && response.metadata && lastManifest) {
+            lastManifest.pageTitle = response.metadata.pageTitle || lastManifest.pageTitle;
+            lastManifest.videoTitle = response.metadata.videoTitle || '';
+            lastManifest.supportMaterials = response.metadata.supportMaterials || [];
+            chrome.storage.local.set({ lastManifest });
+            sendResponse({ success: true, metadata: response.metadata });
+          } else {
+            sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
+          }
+        });
+      } else {
+        sendResponse({ success: false, error: 'Nenhuma aba ativa' });
+      }
+    });
+    return true; // Manter canal aberto para resposta assíncrona
   }
   return true;
 });
