@@ -130,27 +130,20 @@ def view_report_standalone(domain, video_id):
         
         async function loadPromptsInSelector() {{
             const selector = document.getElementById('reprocess-model-select');
-            console.log('[DEBUG] Seletor encontrado:', selector);
             if (!selector) return;
             
             try {{
                 const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
                 let data = null;
                 
-                console.log('[DEBUG] Tentando carregar prompts de:', hosts);
-                
                 for (const host of hosts) {{
                     try {{
-                        console.log('[DEBUG] Tentando host:', host);
                         const response = await fetch(host + '/prompts', {{ cache: 'no-store' }});
-                        console.log('[DEBUG] Resposta de', host, ':', response.status);
                         if (response.ok) {{
                             data = await response.json();
-                            console.log('[DEBUG] Dados recebidos:', data);
                             break;
                         }}
                     }} catch (e) {{
-                        console.log('[DEBUG] Erro em', host, ':', e.message);
                         continue;
                     }}
                 }}
@@ -158,7 +151,6 @@ def view_report_standalone(domain, video_id):
                 if (!data) throw new Error('API indisponível');
                 
                 const prompts = data.prompts || [];
-                console.log('[DEBUG] Prompts encontrados:', prompts.length);
                 
                 if (prompts.length === 0) {{
                     selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
@@ -175,10 +167,8 @@ def view_report_standalone(domain, video_id):
                     selector.appendChild(option);
                 }});
                 
-                console.log('[DEBUG] Seletor populado com sucesso!');
-                
             }} catch (error) {{
-                console.error('[DEBUG] Erro ao carregar prompts:', error);
+                console.error('Erro ao carregar prompts:', error);
                 selector.innerHTML = '<option value="">❌ Erro ao carregar</option>';
             }}
         }}
