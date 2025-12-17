@@ -156,6 +156,18 @@ async function extractPageMetadata() {
 
         const finalH1 = h1?.textContent?.trim() || 'não encontrado';
         console.log('[Video Extractor] Hub.la - H1 após', attempts * 500, 'ms:', finalH1);
+
+        // Aguardar editor de conteúdo carregar links (BlockNote, etc)
+        let editorAttempts = 0;
+        while (editorAttempts < 4) {
+            const editorLinks = document.querySelectorAll('.bn-editor a, .custom-blocknote-editor a');
+            if (editorLinks.length > 0) {
+                console.log('[Video Extractor] Hub.la - Editor com', editorLinks.length, 'links após', editorAttempts * 500, 'ms');
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+            editorAttempts++;
+        }
     }
 
     const metadata = {
