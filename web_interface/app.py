@@ -661,6 +661,15 @@ def validate_prompt_endpoint():
         print(f"Erro ao validar prompt: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/report/<path:domain>/<path:video_id>')
+def view_report(domain, video_id):
+    """
+    Rota para visualizar relatório standalone (usado pela extensão)
+    """
+    import time
+    timestamp = int(time.time())
+    return render_template('report_standalone.html', domain=domain, video_id=video_id, timestamp=timestamp)
+
 def process_videos_batch(urls):
     """Processar lista de URLs em batch"""
     global processing_state
