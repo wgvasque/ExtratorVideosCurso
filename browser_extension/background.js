@@ -491,6 +491,13 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         setTimeout(() => {
           // Solicitar metadados
           chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (metadata) => {
+            // Verificar erro de runtime
+            if (chrome.runtime.lastError) {
+              console.error('[Video Extractor] Erro ao enviar mensagem:', chrome.runtime.lastError.message);
+              sendResponse({ success: false, error: 'Content script não respondeu: ' + chrome.runtime.lastError.message });
+              return;
+            }
+
             if (metadata && metadata.success) {
               // Criar novo manifest com metadados
               const capture = {
@@ -513,6 +520,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
               console.log('[Video Extractor] Captura manual realizada:', capture);
               sendResponse({ success: true, manifest: capture });
             } else {
+              console.error('[Video Extractor] Metadados inválidos:', metadata);
               sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
             }
           });
