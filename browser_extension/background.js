@@ -481,14 +481,20 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       }
 
       try {
+        console.log('[Video Extractor] Injetando content script na aba:', tabId);
+
         // Injetar content script para extrair metadados
         await chrome.scripting.executeScript({
           target: { tabId: tabId },
           files: ['content.js']
         });
 
+        console.log('[Video Extractor] Content script injetado, aguardando 500ms...');
+
         // Aguardar um pouco para o script carregar
         setTimeout(() => {
+          console.log('[Video Extractor] Enviando mensagem extractMetadata...');
+
           // Solicitar metadados
           chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (metadata) => {
             // Verificar erro de runtime
