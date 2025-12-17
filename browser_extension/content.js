@@ -130,9 +130,15 @@ function extractSupportMaterials() {
 
 // Função principal para extrair todos os metadados
 async function extractPageMetadata() {
-    // Para hub.la, aguardar 1 segundo para o conteúdo carregar (SPA)
+    // Para hub.la, aguardar H1 carregar (SPA com carregamento dinâmico)
     if (window.location.hostname.includes('hub.la')) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Aguardar até 3 segundos para o H1 aparecer
+        let attempts = 0;
+        while (attempts < 6 && !document.querySelector('h1')) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            attempts++;
+        }
+        console.log('[Video Extractor] Hub.la - H1 encontrado após', attempts * 500, 'ms');
     }
 
     const metadata = {
