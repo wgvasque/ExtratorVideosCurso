@@ -348,9 +348,52 @@ function templateV2SolarPop(reportData) {
                        background: white;
                        cursor: pointer;
                        font-family: 'Inter', sans-serif;">
-            <option value="modelo2">📊 Modelo 2 (Padrão)</option>
-            <option value="modelo4">🎯 Modelo 4 (P.R.O.M.P.T.)</option>
+            <option value="">⏳ Carregando prompts...</option>
         </select>
+        
+        <script>
+        // Carregar prompts disponíveis para reprocessamento
+        (async function loadReprocessPrompts() {
+            const selector = document.getElementById('reprocess-model-select');
+            if (!selector) return;
+            
+            try {
+                const response = await fetch('/prompts', { cache: 'no-store' });
+                if (!response.ok) throw new Error('API indisponível');
+                
+                const data = await response.json();
+                const prompts = data.prompts || [];
+                
+                if (prompts.length === 0) {
+                    selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
+                    return;
+                }
+                
+                // Popular dropdown
+                selector.innerHTML = '';
+                prompts.forEach(prompt => {
+                    const option = document.createElement('option');
+                    option.value = prompt.name;
+                    const icon = prompt.valid ? '✅' : '❌';
+                    option.textContent = \`\${icon} \${prompt.name}\`;
+                    option.disabled = !prompt.valid;
+                    selector.appendChild(option);
+                });
+                
+                // Selecionar o prompt usado atualmente (se estiver no meta)
+                const currentPrompt = '${data.prompt_model_usado || data._modelo || ''}';
+                if (currentPrompt) {
+                    Array.from(selector.options).forEach(opt => {
+                        if (opt.value === currentPrompt) opt.selected = true;
+                    });
+                }
+                
+            } catch (error) {
+                console.error('Erro ao carregar prompts:', error);
+                selector.innerHTML = '<option value="">❌ Erro ao carregar</option>';
+            }
+        })();
+        </script>
     </div>
     
     <!-- Modal de Reprocessamento -->
