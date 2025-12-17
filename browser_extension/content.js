@@ -7,32 +7,23 @@ console.log('[Video Extractor] Content script carregado');
 function extractVideoTitle() {
     // Tentar várias estratégias para encontrar o título
     const strategies = [
-        // 1. Meta tag Open Graph
-        () => document.querySelector('meta[property="og:title"]')?.content,
-        // 2. Meta tag Twitter
-        () => document.querySelector('meta[name="twitter:title"]')?.content,
-        // 3. Hub.la - título abaixo do vídeo
+        // 1. Hub.la - título abaixo do vídeo (PRIMEIRO para hub.la)
         () => {
             if (window.location.hostname.includes('hub.la')) {
-                // Procurar por h1, h2, ou elementos comuns após o player
-                const selectors = [
-                    'h1',  // H1 genérico primeiro
-                    'h1.lesson-title',
-                    'h2.lesson-title',
-                    '.video-info h1',
-                    '.video-info h2',
-                    '.lesson-info h1',
-                    '.lesson-info h2',
-                    'div[class*="title"] h1',
-                    'div[class*="title"] h2'
-                ];
-                for (const sel of selectors) {
-                    const el = document.querySelector(sel);
-                    if (el) return el.textContent?.trim();
+                const h1 = document.querySelector('h1');
+                const h1Text = h1?.textContent?.trim() || '';
+                // Só retornar se não for vazio e não for 'Hubla'
+                if (h1Text && h1Text !== 'Hubla' && h1Text.length > 3) {
+                    console.log('[Video Extractor] Hub.la H1:', h1Text);
+                    return h1Text;
                 }
             }
             return null;
         },
+        // 2. Meta tag Open Graph
+        () => document.querySelector('meta[property="og:title"]')?.content,
+        // 3. Meta tag Twitter
+        () => document.querySelector('meta[name="twitter:title"]')?.content,
         // 4. Primeiro H1 da página
         () => document.querySelector('h1')?.textContent?.trim(),
         // 5. Título da página
