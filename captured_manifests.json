@@ -68,8 +68,8 @@
   "http://localhost:5000/": {
     "manifestUrl": "http://localhost:5000/api/report-data/b-vz-d6f56d0c-524.tv.pandavideo.com.br/playlist.m3u8",
     "domain": "localhost",
-    "timestamp": "2025-12-17T11:54:37.697Z",
-    "captured_at": "2025-12-17T08:54:38.015591"
+    "timestamp": "2025-12-17T14:40:44.942Z",
+    "captured_at": "2025-12-17T11:40:45.266211"
   },
   "http://127.0.0.1:5000/": {
     "manifestUrl": "http://127.0.0.1:5000/api/report-data/b-vz-d6f56d0c-524.tv.pandavideo.com.br/playlist.m3u8",

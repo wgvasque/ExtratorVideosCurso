@@ -68,3 +68,60 @@
   - Lote: `python -m extrator_videos.batch_cli --file targets.txt --outdir . --loglevel debug --logdir logs`
   - Único: `python -m extrator_videos.transcribe_cli "<URL>" --referer <referer> --out resumo.json --md resumo.md`
   - PDF: defina `ENABLE_PDF=1` e `WKHTMLTOPDF_PATH` com o executável do `wkhtmltopdf`
+
+## Sistema de Seleção Dinâmica de Prompts
+
+### Visão Geral
+Sistema que permite selecionar diferentes templates de prompts para processamento de transcrições, com validação automática de estrutura de 14 seções obrigatórias.
+
+### Modelos Disponíveis
+- **MODELO 5**: ✅ Válido (14/14 seções) - Transcritor especializado em conteúdo educacional
+- **MODELO 4**: Framework P.R.O.M.P.T. híbrido
+- **MODELO 3**: Modelo intermediário
+- **MODELO 2**: ❌ Inválido (sem bloco JSON)
+
+### Uso na Interface Web
+1. Abra `http://localhost:5000`
+2. Selecione o modelo de prompt no dropdown "MODELO DE PROMPT"
+3. Veja indicadores de validação (✅ válido | ❌ inválido)
+4. Clique no "?" para ver detalhes do prompt
+5. Processe vídeos normalmente - o prompt selecionado será usado
+
+### Uso via API
+```python
+from extrator_videos import gemini_client
+
+# Usar prompt específico
+result = gemini_client.summarize_transcription_full(
+    text=transcricao,
+    blocks=blocos,
+    prompt_template="MODELO 5 PROMPT - Transcrição Video Aulas"
+)
+
+# Usar sistema legado (JSON)
+result = gemini_client.summarize_transcription_full(
+    text=transcricao,
+    blocks=blocos
+)
+```
+
+### Criar Novo Prompt
+1. Copie `modelos_prompts/MODELO 5 PROMPT - Transcrição Video Aulas.md`
+2. Personalize instruções mantendo estrutura JSON de 14 seções
+3. Salve com nome descritivo em `modelos_prompts/`
+4. Valide: `python -m extrator_videos.prompt_validator`
+
+### Estrutura Obrigatória
+Todos os prompts devem incluir bloco JSON com 14 seções:
+- resumo_executivo, objetivos_aprendizagem, conceitos_fundamentais
+- estrutura_central, exemplos, ferramentas_metodos
+- orientacoes_praticas, abordagem_pedagogica, ideias_chave
+- pontos_memorizacao, citacoes_marcantes, proximos_passos
+- preparacao_proxima_aula, materiais_apoio
+
+Ver `modelos_prompts/README.md` para detalhes completos.
+
+### API Endpoints
+- `GET /prompts` - Lista todos os prompts com validação
+- `GET /prompts/<name>` - Detalhes de prompt específico
+- `POST /prompts/validate` - Valida prompt customizado
