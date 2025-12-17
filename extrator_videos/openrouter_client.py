@@ -8,6 +8,7 @@ import requests
 import json
 import re
 from typing import Dict, List, Optional
+from . import prompt_loader
 
 # Importar load_prompt do gemini_client para configuração unificada
 def _load_prompt_config():
@@ -84,7 +85,8 @@ def summarize_with_openrouter(
     text: str, 
     blocks: List[dict], 
     model: Optional[str] = None,
-    use_blocks: bool = False
+    use_blocks: bool = False,
+    prompt_template: str = None
 ) -> Dict:
     """
     Gera resumo estruturado usando OpenRouter.ai
@@ -94,6 +96,7 @@ def summarize_with_openrouter(
         blocks: Blocos segmentados com timestamps (opcional)
         model: Modelo a usar (padrão: variável de ambiente ou gpt-4o-mini)
         use_blocks: Se True, inclui blocos no prompt (aumenta tamanho)
+        prompt_template: Nome do template de prompt (opcional). Se fornecido, usa prompt_loader.
     
     Returns:
         Dict com: data, raw, model, prompt, origin, error
@@ -109,21 +112,41 @@ def summarize_with_openrouter(
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY não configurada no arquivo .env")
     
-    # Carregar configuração unificada do JSON
-    cfg = _load_prompt_config()
-    parametros = cfg.get("parametros", {}) if cfg else {}
+    # Determinar qual sistema de prompt usar
+    prompt = None
+    cfg = None
     
-    # Determinar modelo (prioridade: argumento > JSON > .env > padrão)
-    if model is None:
-        model = parametros.get("modelo_openrouter") or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+    if prompt_template:
+        # Usar novo sistema de prompt_loader
+        print(f"📝 Usando template de prompt: {prompt_template}")
+        prompt = prompt_loader.get_prompt_for_processing(prompt_template, text)
+        if not prompt:
+            print(f"⚠️ Template '{prompt_template}' não encontrado, usando sistema legado")
+            prompt_template = None  # Fallback para sistema legado
     
-    # Construir prompt usando configuração unificada
-    prompt = _build_prompt_from_config(cfg, text, blocks, use_blocks)
-    
-    # Obter parâmetros (prioridade: JSON > .env > padrão)
-    temperatura = parametros.get("temperatura") or float(os.getenv("OPENROUTER_TEMPERATURE", "0.3"))
-    max_tokens = parametros.get("max_tokens") or int(os.getenv("OPENROUTER_MAX_TOKENS", "4096"))
-    timeout = parametros.get("timeout") or int(os.getenv("OPENROUTER_TIMEOUT", "60"))
+    # Se não usar prompt_template, usar sistema JSON legado
+    if not prompt_template:
+        cfg = _load_prompt_config()
+        parametros = cfg.get("parametros", {}) if cfg else {}
+        
+        # Determinar modelo (prioridade: argumento > JSON > .env > padrão)
+        if model is None:
+            model = parametros.get("modelo_openrouter") or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+        
+        # Construir prompt usando configuração unificada
+        prompt = _build_prompt_from_config(cfg, text, blocks, use_blocks)
+        
+        # Obter parâmetros (prioridade: JSON > .env > padrão)
+        temperatura = parametros.get("temperatura") or float(os.getenv("OPENROUTER_TEMPERATURE", "0.3"))
+        max_tokens = parametros.get("max_tokens") or int(os.getenv("OPENROUTER_MAX_TOKENS", "4096"))
+        timeout = parametros.get("timeout") or int(os.getenv("OPENROUTER_TIMEOUT", "60"))
+    else:
+        # Usar valores padrão quando usar prompt_template
+        if model is None:
+            model = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+        temperatura = float(os.getenv("OPENROUTER_TEMPERATURE", "0.3"))
+        max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "4096"))
+        timeout = int(os.getenv("OPENROUTER_TIMEOUT", "60"))
     
     # Preparar requisição
     headers = {

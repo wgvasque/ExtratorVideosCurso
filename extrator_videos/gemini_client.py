@@ -2,6 +2,7 @@ import os
 import google.generativeai as genai
 import re
 import json
+from . import prompt_loader
 
 def configure():
     key = os.getenv("GEMINI_API_KEY")
@@ -372,10 +373,32 @@ def summarize_transcription(text: str, blocks: list):
     except Exception:
         return naive_summary(text)
 
-def summarize_transcription_full(text: str, blocks: list) -> dict:
-    """Gera resumo completo usando Modelo 2 (14 seções)"""
+def summarize_transcription_full(text: str, blocks: list, prompt_template: str = None) -> dict:
+    """
+    Gera resumo completo usando Modelo 2 (14 seções)
+    
+    Args:
+        text: Transcrição do vídeo
+        blocks: Blocos de metadados
+        prompt_template: Nome do template de prompt (opcional). Se fornecido, usa prompt_loader.
+                        Se None, usa sistema JSON legado (load_prompt)
+    """
     configure()
-    cfg = load_prompt()
+    
+    # Determinar qual sistema de prompt usar
+    prompt_text = None
+    if prompt_template:
+        # Usar novo sistema de prompt_loader
+        print(f"📝 Usando template de prompt: {prompt_template}")
+        prompt_text = prompt_loader.get_prompt_for_processing(prompt_template, text)
+        if not prompt_text:
+            print(f"⚠️ Template '{prompt_template}' não encontrado, usando sistema legado")
+            prompt_template = None  # Fallback para sistema legado
+    
+    # Se não usar prompt_template, usar sistema JSON legado
+    cfg = None
+    if not prompt_template:
+        cfg = load_prompt()
     
     # Suporta modelo_gemini (novo) ou modelo (legado)
     modelo_cfg = None
@@ -410,8 +433,12 @@ def summarize_transcription_full(text: str, blocks: list) -> dict:
         except Exception as e:
             last_error = str(e)
     
-    # Construir prompt usando Modelo 2
-    if cfg and "prompt" in cfg:
+    # Construir prompt
+    if prompt_text:
+        # Usar prompt do template (já formatado com transcrição)
+        prompt = prompt_text
+    elif cfg and "prompt" in cfg:
+        # Usar sistema JSON legado
         prompt = build_modelo2_prompt(cfg, text, blocks)
     else:
         prompt = build_fallback_prompt(text, blocks)
