@@ -1,0 +1,10 @@
+{
+  "alunos.segueadii.com.br": {
+    "email": "seu_email@exemplo.com",
+    "password": "sua_senha_secreta"
+  },
+  "app.hub.la": {
+    "email": "outro_email@hub.la",
+    "password": "outra_senha"
+  }
+}

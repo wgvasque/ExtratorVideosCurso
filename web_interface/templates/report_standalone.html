@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #FFF8E7;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .error {
+            text-align: center;
+            padding: 50px;
+            color: #e53e3e;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="report-container">
+        <div class="loading">
+            <p>⏳ Carregando relatório...</p>
+        </div>
+    </div>
+
+    <script src="/static/js/templates.js?v={{ timestamp }}"></script>
+    <script>
+        const domain = "{{ domain }}";
+        const videoId = "{{ video_id }}";
+
+        async function loadReport() {
+            try {
+                // Tentar múltiplos hosts para funcionar da extensão
+                const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+                let reportData = null;
+                
+                for (const host of hosts) {
+                                  const response = await fetch(host + '/api/report-data/' + domain + '/' + videoId);
+               ponse.ok) {
+                            reportData = await response.json();
+                            break;
+                        }
+                    } catch (e) {
+                        contin        }
+                }
+                
+                if (!reportData) {
+                    throw new Error('Relatório não encontrado');
+                }
+                
+                // Atualizar título da página
+                document.title = reportData.meta?.title || 'Relatório';
+                
+                // Renderizar usando template Solar Pop (v2)
+                const emplateV2SolarPop(repora);          document.getElementById('report-container').innerHTML = html;
+                
+            } catch (error) {
+                document.getElementById('report-container').innerHTML = `
+                    <div class="error">
+                        <h2>❌ Erro ao carregar relatório</h2>
+                        <p>${error.message}</p>
+                        <p><a href="/">← Voltar para a interface</a></p>
+                    </div>
+                `;
+            }
+        }
+        
+        loadReport();
+    </script>
+</body>
+
+</html>

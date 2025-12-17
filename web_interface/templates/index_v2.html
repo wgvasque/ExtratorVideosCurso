@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Processor Pro | Solar Pop</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap"
+        rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                    },
+                    colors: {
+                        base: '#FFF8E7',      /* Cosmic Latte */
+                        ink: '#2D3436',       /* Void Charcoal */
+                        accent: '#FF6B6B',    /* Bittersweet Coral */
+                        pop: '#4ECDC4',       /* Medium Turquoise */
+                        sun: '#FFE66D',       /* Maize Yellow */
+                    },
+                    boxShadow: {
+                        'retro': '4px 4px 0px 0px #2D3436',
+                        'retro-hover': '6px 6px 0px 0px #2D3436',
+                        'retro-active': '2px 2px 0px 0px #2D3436',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #FFF8E7;
+            color: #2D3436;
+        }
+
+        .solar-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            background-color: #FFF8E7;
+            overflow: hidden;
+        }
+
+        .solar-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.6;
+            animation: blob 15s infinite alternate;
+        }
+
+        @keyframes blob {
+            0% {
+                transform: scale(1);
+            }
+
+            100% {
+                transform: scale(1.1);
+            }
+        }
+
+        .blob-1 {
+            top: -10%;
+            left: -10%;
+            width: 500px;
+            height: 500px;
+            background: #FF6B6B;
+        }
+
+        .blob-2 {
+            top: 40%;
+            right: -20%;
+            width: 400px;
+            height: 400px;
+            background: #4ECDC4;
+        }
+
+        /* Button Standards */
+        .btn-retro {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            text-transform: uppercase;
+            border: 2px solid #2D3436;
+            border-radius: 0.75rem;
+            /* rounded-xl */
+            padding: 0.5rem 1rem;
+            box-shadow: 4px 4px 0px 0px #2D3436;
+            transition: all 0.1s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-retro:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px 0px #2D3436;
+        }
+
+        .btn-retro:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px 0px #2D3436;
+        }
+
+        .btn-primary {
+            background-color: #FF6B6B;
+            color: white;
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: #2D3436;
+        }
+
+        .btn-tertiary {
+            background-color: #FFE66D;
+            color: #2D3436;
+        }
+
+        .retro-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.5);
+            border: 2px solid #2D3436;
+            border-radius: 1rem;
+            padding: 1rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.25rem;
+            box-shadow: 4px 4px 0px 0px #2D3436;
+            transition: all 0.2s;
+        }
+
+        .retro-input:focus {
+            outline: none;
+            background: white;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px 0px #FF6B6B;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #FF6B6B;
+            border: 2px solid #2D3436;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center py-10 px-4 selection:bg-accent selection:text-white">
+
+    <div class="solar-bg">
+        <div class="solar-blob blob-1"></div>
+        <div class="solar-blob blob-2"></div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="w-full max-w-4xl flex justify-between items-center mb-12">
+        <div>
+            <h1 class="font-display font-black text-4xl tracking-tight leading-none group cursor-default">
+                VIDEO<br><span class="text-accent">PROCESSOR</span>
+            </h1>
+        </div>
+    </header>
+
+    <main class="w-full max-w-4xl space-y-12">
+
+        <!-- INPUT SECTION -->
+        <section id="input-zone" class="relative">
+            <label class="block font-display font-bold text-xl mb-4 ml-1">O QUE VAMOS CRIAR?</label>
+
+            <div class="relative">
+                <textarea id="urls-input" class="retro-input min-h-[150px] resize-y"
+                    placeholder="COLE SUAS URLS AQUI OU CARREGUE UM ARQUIVO..."></textarea>
+
+                <!-- Floating Validation -->
+                <div id="validation-counter" class="absolute top-4 right-4 hidden">
+                    <div
+                        class="flex items-center gap-2 px-3 py-1 bg-sun border-2 border-ink rounded-lg shadow-[2px_2px_0px_0px_#2D3436]">
+                        <span id="validation-icon"></span>
+                        <span id="validation-count" class="font-bold text-sm"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOOLBAR -->
+            <div class="flex flex-wrap gap-4 mt-6 justify-between items-center">
+                <div class="flex flex-wrap gap-3">
+                    <input type="file" id="file-upload" class="hidden" accept=".txt,.csv">
+                    <button onclick="document.getElementById('file-upload').click()"
+                        class="btn-retro btn-tertiary text-sm">
+                        📂 CARREGAR ARQUIVO
+                    </button>
+                    <button onclick="pasteFromClipboard()" class="btn-retro btn-secondary text-sm">
+                        📋 COLAR
+                    </button>
+                    <button onclick="clearInput()"
+                        class="btn-retro btn-secondary text-sm hover:bg-red-100 hover:text-red-600">
+                        🗑️ LIMPAR
+                    </button>
+
+                    <!-- Hidden helpers -->
+                    <span id="url-count" class="hidden"></span>
+                    <span id="url-validation-badge" class="hidden"></span>
+                    <div id="validation-messages" class="hidden"></div>
+                </div>
+
+                <div class="flex flex-col gap-3">
+                    <!-- Seletor de Modelo de Prompt Dinâmico -->
+                    <div class="flex items-center gap-2">
+                        <label for="prompt-model-select" class="text-xs font-bold text-ink tracking-wide">MODELO DE
+                            PROMPT:</label>
+                        <select id="prompt-model-select"
+                            class="px-3 py-1.5 text-xs font-bold border-2 border-ink rounded bg-white hover:bg-base transition-colors cursor-pointer">
+                            <option value="">⏳ Carregando prompts...</option>
+                        </select>
+                        <div id="prompt-validation-indicator" class="flex items-center gap-1"
+                            title="Status de validação">
+                            <span id="prompt-status-icon"></span>
+                        </div>
+                        <button onclick="showPromptInfo()"
+                            class="w-6 h-6 border-2 border-ink bg-sun hover:bg-accent hover:text-white font-bold rounded flex items-center justify-center text-xs transition-colors"
+                            title="Informações sobre o prompt selecionado">
+                            ?
+                        </button>
+                    </div>
+                    <!-- Informações do Prompt Selecionado -->
+                    <div id="prompt-info" class="hidden text-xs bg-base border-2 border-ink rounded p-2">
+                        <div id="prompt-description" class="text-ink"></div>
+                        <div id="prompt-validation-details" class="mt-1 text-xs"></div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <!-- Mode Toggle Hidden -->
+                        <button id="btn-process" onclick="startProcessing()"
+                            class="btn-retro btn-primary text-base px-8">
+                            <span id="btn-process-spinner" class="hidden animate-spin mr-2">⚡</span>
+                            PROCESSAR AGORA
+                        </button>
+                        <button id="btn-cancel" onclick="cancelProcessing()"
+                            class="btn-retro btn-secondary hidden text-red-500 border-red-500">
+                            CANCELAR
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PROCESSING SECTION -->
+        <section id="progress-card" class="hidden border-4 border-ink bg-white rounded-2xl p-8 shadow-retro">
+            <div class="flex justify-between items-end mb-6">
+                <div>
+                    <h2 class="font-display font-black text-3xl">TRABALHANDO...</h2>
+                    <p id="current-url" class="font-mono font-bold text-sm mt-1 text-secondary truncate max-w-md">
+                        INICIALIZANDO...</p>
+                </div>
+                <div class="text-right">
+                    <div id="progress-percent" class="font-display font-black text-6xl text-accent">0%</div>
+                </div>
+            </div>
+
+            <!-- Thick Bar -->
+            <div class="w-full h-6 bg-base border-2 border-ink rounded-full overflow-hidden mb-8">
+                <div id="progress-bar" class="h-full bg-pop border-r-2 border-ink transition-all duration-300 w-0">
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 border-t-2 border-ink pt-6">
+                <div>
+                    <span class="block text-xs font-black text-secondary tracking-widest">TEMPO</span>
+                    <span id="elapsed-time" class="block font-mono font-bold text-xl">0s</span>
+                </div>
+                <div id="eta-container">
+                    <span class="block text-xs font-black text-secondary tracking-widest">ESTIMATIVA</span>
+                    <span id="eta-time" class="block font-mono font-bold text-xl">--</span>
+                </div>
+
+                <!-- Steps -->
+                <div id="steps-indicator" class="col-span-2 flex items-center justify-between relative px-2">
+                    <div class="absolute w-full h-1 bg-ink -z-10"></div>
+                    <div id="step-extraction" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                    <div id="step-transcription" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                    <div id="step-summary" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                    <div id="step-report" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                </div>
+            </div>
+
+            <div id="status-badge" class="hidden"></div> <!-- Hidden logic container -->
+
+            <!-- Logs -->
+            <div id="logs-card" class="hidden mt-8">
+                <button onclick="toggleLogs()"
+                    class="text-xs font-bold font-mono border-2 border-ink px-2 py-1 bg-base hover:bg-accent hover:text-white transition-colors">
+                    TERMINAL >_
+                </button>
+                <div id="logs-content"
+                    class="hidden mt-2 bg-ink p-4 border-2 border-ink text-pop font-mono text-xs h-40 overflow-y-auto">
+                    <div id="logs-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- EXTENSION MANIFESTS SECTION -->
+        <section id="extension-manifests-section" class="hidden">
+            <div class="bg-white border-2 border-ink rounded-xl p-6 shadow-retro">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-display font-bold text-lg">
+                        🔗 Manifests Capturados (Extensão)
+                    </h3>
+                    <button onclick="refreshManifests()" class="btn-retro btn-secondary text-xs">
+                        🔄 ATUALIZAR
+                    </button>
+                </div>
+                <div id="manifests-list" class="space-y-3">
+                    <p class="text-sm text-gray-500">Carregando...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- LIBRARY SECTION -->
+        <section class="animate-enter delay-2">
+            <div class="flex justify-between items-center mb-6">
+                <h2
+                    class="font-display font-black text-3xl bg-sun px-3 transform -rotate-1 border-2 border-ink shadow-[2px_2px_0px_0px_#2D3436]">
+                    BIBLIOTECA</h2>
+                <input type="text" id="search-reports" placeholder="BUSCAR..."
+                    class="retro-input p-2 text-sm w-48 border-2">
+            </div>
+
+            <div id="reports-list" class="grid gap-4"></div>
+        </section>
+
+    </main>
+
+    <!-- Modals & Toasts -->
+    <div id="whats-new-modal" class="fixed inset-0 bg-ink/90 hidden items-center justify-center z-50">
+        <div class="bg-base border-4 border-ink rounded-xl p-8 max-w-md w-full shadow-retro relative">
+            <div
+                class="absolute -top-4 -right-4 bg-accent text-white font-black px-4 py-2 border-2 border-ink transform rotate-3">
+                V2.1</div>
+            <h2 class="font-display font-black text-3xl mb-4">SOLAR POP V2.1</h2>
+            <p class="font-medium mb-6">Visual novo, padronizado e com as funções que você sentiu falta.</p>
+            <button onclick="closeWhatsNew()" class="btn-retro btn-primary w-full justify-center">ENTENDI!</button>
+        </div>
+    </div>
+
+    <!-- Model Info Modal -->
+    <div id="model-info-modal" class="fixed inset-0 bg-ink/90 hidden items-center justify-center z-50">
+        <div
+            class="bg-base border-4 border-ink rounded-xl p-8 max-w-2xl w-full shadow-retro relative max-h-[90vh] overflow-y-auto">
+            <button onclick="closeModelInfo()"
+                class="absolute top-4 right-4 w-8 h-8 border-2 border-ink bg-white hover:bg-red-500 hover:text-white font-bold rounded flex items-center justify-center">
+                X
+            </button>
+
+            <h2 class="font-display font-black text-3xl mb-6">MODELOS DE PROMPT</h2>
+
+            <div class="space-y-6">
+                <!-- Modelo 2 -->
+                <div class="bg-white border-2 border-ink rounded-xl p-6 shadow-retro">
+                    <div class="flex items-center gap-3 mb-3">
+                        <span class="text-3xl">📊</span>
+                        <div>
+                            <h3 class="font-display font-bold text-xl">MODELO 2 (Padrão)</h3>
+                            <p class="text-sm text-gray-600">Equilibrado e eficiente</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <p><strong>✅ Velocidade:</strong> Rápida</p>
+                        <p><strong>✅ Custo:</strong> Baseline (econômico)</p>
+                        <p><strong>✅ Temperature:</strong> 0.3</p>
+                        <p><strong>✅ Uso recomendado:</strong> Vídeos educacionais gerais, processamento em lote</p>
+                    </div>
+                </div>
+
+                <!-- Modelo 4 -->
+                <div class="bg-white border-2 border-ink rounded-xl p-6 shadow-retro">
+                    <div class="flex items-center gap-3 mb-3">
+                        <span class="text-3xl">🎯</span>
+                        <div>
+                            <h3 class="font-display font-bold text-xl">MODELO 4 (Híbrido)</h3>
+                            <p class="text-sm text-gray-600">Otimizado com framework P.R.O.M.P.T.</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <p><strong>✅ Precisão:</strong> Máxima</p>
+                        <p><strong>✅ Temperature:</strong> 0.0 (zero criatividade)</p>
+                        <p><strong>✅ Recursos:</strong> Protocolo de conflito + Self-consistency</p>
+                        <p><strong>✅ Uso recomendado:</strong> Conteúdo técnico/científico, documentação crítica</p>
+                    </div>
+                </div>
+
+                <!-- Comparação -->
+                <div class="bg-sun border-2 border-ink rounded-xl p-4">
+                    <h4 class="font-bold mb-2">📌 Quando usar cada um?</h4>
+                    <ul class="text-sm space-y-1">
+                        <li><strong>Modelo 2:</strong> Processamento rápido, custo menor, vídeos gerais</li>
+                        <li><strong>Modelo 4:</strong> Precisão máxima, vídeos complexos, validação rigorosa</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="report-modal" class="fixed inset-0 bg-ink/90 hidden items-center justify-center z-50">
+        <div class="bg-white border-4 border-ink rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-retro">
+            <div class="p-4 border-b-4 border-ink flex justify-between items-center bg-sun">
+                <h3 id="modal-title" class="font-black text-xl">RELATÓRIO</h3>
+                <button onclick="closeModal()"
+                    class="w-8 h-8 border-2 border-ink bg-white hover:bg-red-500 hover:text-white font-bold rounded flex items-center justify-center">X</button>
+            </div>
+            <iframe id="report-iframe" class="flex-1 w-full border-none"></iframe>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-8 right-8 z-50 flex flex-col gap-3"></div>
+
+    <script src="/static/js/templates.js?v=20251216"></script>
+    <script src="/static/js/main_v2.js"></script>
+    <script src="/static/js/extension_manifests.js"></script>
+
+    <!-- Extension Manifests Section (injected by JS) -->
+    <div id="extension-manifests" class="hidden" style="margin-top: 2rem;">
+        <div
+            style="background: white; border: 2px solid #2D3436; border-radius: 0.75rem; padding: 1.5rem; box-shadow: 4px 4px 0px 0px #2D3436;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 1.125rem;">
+                    🔗 Manifests Capturados (Extensão)
+                </h3>
+                <button onclick="refreshManifests()" class="btn-retro btn-secondary text-xs">
+                    🔄 ATUALIZAR
+                </button>
+            </div>
+            <div id="manifests-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <p style="font-size: 0.875rem; color: #666;">Carregando...</p>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Report Cards Injection Style */
+        #reports-list>div {
+            background: white !important;
+            border: 2px solid #2D3436 !important;
+            border-radius: 0.75rem !important;
+            box-shadow: 4px 4px 0px 0px #2D3436 !important;
+            transition: all 0.1s !important;
+        }
+
+        #reports-list>div:hover {
+            transform: translate(-2px, -2px) !important;
+            box-shadow: 6px 6px 0px 0px #FF6B6B !important;
+        }
+    </style>
+
+    <!-- JavaScript Files -->
+    <script src="{{ url_for('static', filename='js/templates.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main_v2.js') }}"></script>
+</body>
+
+</html>

@@ -3,7 +3,7 @@ from typing import Dict, List
 VIDEO_EXTS = [".mp4", ".m3u8", ".ts", ".mov", ".webm", ".ogg", ".mpd"]
 
 def is_video_url(url: str) -> bool:
-    u = url.lower()
+    u = url.lower().split("?")[0]
     return any(u.endswith(e) for e in VIDEO_EXTS)
 
 class NetworkCapture:
