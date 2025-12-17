@@ -228,20 +228,28 @@
                 </div>
 
                 <div class="flex flex-col gap-3">
-                    <!-- Seletor de Modelo de Prompt -->
+                    <!-- Seletor de Modelo de Prompt Dinâmico -->
                     <div class="flex items-center gap-2">
-                        <label for="prompt-model-select"
-                            class="text-xs font-bold text-ink tracking-wide">MODELO:</label>
+                        <label for="prompt-model-select" class="text-xs font-bold text-ink tracking-wide">MODELO DE
+                            PROMPT:</label>
                         <select id="prompt-model-select"
                             class="px-3 py-1.5 text-xs font-bold border-2 border-ink rounded bg-white hover:bg-base transition-colors cursor-pointer">
-                            <option value="modelo2" selected>📊 MODELO 2 (Padrão)</option>
-                            <option value="modelo4">🎯 MODELO 4 (Híbrido)</option>
+                            <option value="">⏳ Carregando prompts...</option>
                         </select>
-                        <button onclick="showModelInfo()"
+                        <div id="prompt-validation-indicator" class="flex items-center gap-1"
+                            title="Status de validação">
+                            <span id="prompt-status-icon"></span>
+                        </div>
+                        <button onclick="showPromptInfo()"
                             class="w-6 h-6 border-2 border-ink bg-sun hover:bg-accent hover:text-white font-bold rounded flex items-center justify-center text-xs transition-colors"
-                            title="Informações sobre os modelos">
+                            title="Informações sobre o prompt selecionado">
                             ?
                         </button>
+                    </div>
+                    <!-- Informações do Prompt Selecionado -->
+                    <div id="prompt-info" class="hidden text-xs bg-base border-2 border-ink rounded p-2">
+                        <div id="prompt-description" class="text-ink"></div>
+                        <div id="prompt-validation-details" class="mt-1 text-xs"></div>
                     </div>
 
                     <div class="flex gap-4">

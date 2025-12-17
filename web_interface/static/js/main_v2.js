@@ -17,6 +17,7 @@ const TOAST_DURATION = 4000;
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Video Processor Pro v2 inicializado');
+    loadAvailablePrompts(); // Carregar prompts disponíveis
     refreshReports();
     setupEventListeners();
     setupWebSocket();
@@ -24,6 +25,140 @@ document.addEventListener('DOMContentLoaded', () => {
     // Mostrar modal "O que há de novo" na primeira visita
     showWhatsNewIfFirstVisit();
 });
+
+// ===== GERENCIAMENTO DE PROMPTS =====
+let availablePrompts = [];
+let selectedPrompt = null;
+
+async function loadAvailablePrompts() {
+    try {
+        const response = await fetch('/prompts');
+        const data = await response.json();
+
+        availablePrompts = data.prompts;
+        populatePromptSelector();
+
+        // Restaurar seleção do localStorage
+        const savedPrompt = localStorage.getItem('selectedPrompt');
+        if (savedPrompt) {
+            const selector = document.getElementById('prompt-model-select');
+            if (selector) {
+                selector.value = savedPrompt;
+                await updatePromptInfo(savedPrompt);
+            }
+        } else if (availablePrompts.length > 0) {
+            // Selecionar primeiro prompt válido por padrão
+            const firstValid = availablePrompts.find(p => p.valid);
+            if (firstValid) {
+                document.getElementById('prompt-model-select').value = firstValid.name;
+                await updatePromptInfo(firstValid.name);
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar prompts:', error);
+        showToast('Erro ao carregar modelos de prompt', 'error');
+    }
+}
+
+function populatePromptSelector() {
+    const selector = document.getElementById('prompt-model-select');
+    if (!selector) return;
+
+    selector.innerHTML = '';
+
+    if (availablePrompts.length === 0) {
+        selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
+        return;
+    }
+
+    availablePrompts.forEach(prompt => {
+        const option = document.createElement('option');
+        option.value = prompt.name;
+
+        // Ícone de status
+        const icon = prompt.valid ? '✅' : '❌';
+        const sections = `(${prompt.sections}/14)`;
+
+        option.textContent = `${icon} ${prompt.name} ${sections}`;
+        option.disabled = !prompt.valid;
+
+        selector.appendChild(option);
+    });
+
+    // Event listener para mudança de seleção
+    selector.addEventListener('change', async (e) => {
+        const promptName = e.target.value;
+        await updatePromptInfo(promptName);
+        localStorage.setItem('selectedPrompt', promptName);
+    });
+}
+
+async function updatePromptInfo(promptName) {
+    selectedPrompt = promptName;
+
+    const prompt = availablePrompts.find(p => p.name === promptName);
+    if (!prompt) return;
+
+    // Atualizar ícone de status
+    const statusIcon = document.getElementById('prompt-status-icon');
+    if (statusIcon) {
+        if (prompt.valid) {
+            statusIcon.textContent = '✅';
+            statusIcon.title = `Válido - ${prompt.sections}/14 seções`;
+        } else {
+            statusIcon.textContent = '❌';
+            statusIcon.title = 'Prompt inválido - faltam seções obrigatórias';
+        }
+    }
+
+    // Carregar detalhes completos
+    try {
+        const response = await fetch(`/prompts/${encodeURIComponent(promptName)}`);
+        const details = await response.json();
+
+        // Atualizar descrição
+        const descEl = document.getElementById('prompt-description');
+        if (descEl && details.metadata) {
+            descEl.innerHTML = `<strong>${details.metadata.name}</strong><br>${details.metadata.description}`;
+        }
+
+        // Atualizar detalhes de validação
+        const validationEl = document.getElementById('prompt-validation-details');
+        if (validationEl && details.validation) {
+            let html = '';
+            if (!details.validation.valid) {
+                html += '<div class="text-red-600 font-bold">⚠️ Prompt Inválido</div>';
+                if (details.validation.missing_sections && details.validation.missing_sections.length > 0) {
+                    html += `<div class="mt-1">Faltam ${details.validation.missing_sections.length} seções:</div>`;
+                    html += '<ul class="list-disc list-inside">';
+                    details.validation.missing_sections.slice(0, 3).forEach(section => {
+                        html += `<li>${section}</li>`;
+                    });
+                    if (details.validation.missing_sections.length > 3) {
+                        html += `<li>... e mais ${details.validation.missing_sections.length - 3}</li>`;
+                    }
+                    html += '</ul>';
+                }
+            } else {
+                html += '<div class="text-green-600 font-bold">✅ Prompt Válido</div>';
+                if (details.validation.warnings && details.validation.warnings.length > 0) {
+                    html += `<div class="mt-1 text-yellow-600">${details.validation.warnings.length} avisos</div>`;
+                }
+            }
+            validationEl.innerHTML = html;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar detalhes do prompt:', error);
+    }
+}
+
+function showPromptInfo() {
+    const infoDiv = document.getElementById('prompt-info');
+    if (infoDiv) {
+        infoDiv.classList.toggle('hidden');
+    }
+}
+
 
 // Setup de event listeners
 function setupEventListeners() {

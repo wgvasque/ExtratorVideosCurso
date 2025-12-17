@@ -14,6 +14,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 from extrator_videos import resolve_cache as rc
+from extrator_videos import prompt_loader
 
 # Adicionar diretório pai ao path para importar módulos
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -603,6 +604,62 @@ def get_report_data(domain, video_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Erro ao processar dados: {str(e)}'}), 500
+
+@app.route('/prompts')
+def list_prompts():
+    """Listar prompts disponíveis com validação"""
+    try:
+        prompts = prompt_loader.list_available_prompts()
+        return jsonify({
+            'prompts': prompts,
+            'total': len(prompts),
+            'valid_count': sum(1 for p in prompts if p['valid'])
+        })
+    except Exception as e:
+        print(f"Erro ao listar prompts: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/prompts/<prompt_name>')
+def get_prompt_details(prompt_name):
+    """Obter detalhes de um prompt específico"""
+    try:
+        # Obter metadados
+        metadata = prompt_loader.get_prompt_metadata(prompt_name)
+        
+        # Validar prompt
+        validation = prompt_loader.validate_prompt(prompt_name)
+        
+        # Carregar conteúdo (primeiras 500 caracteres)
+        content = prompt_loader.load_prompt_template(prompt_name)
+        preview = content[:500] + "..." if content and len(content) > 500 else content
+        
+        return jsonify({
+            'name': prompt_name,
+            'metadata': metadata,
+            'validation': validation,
+            'preview': preview,
+            'available': content is not None
+        })
+    except Exception as e:
+        print(f"Erro ao obter detalhes do prompt: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/prompts/validate', methods=['POST'])
+def validate_prompt_endpoint():
+    """Validar um prompt (para testes)"""
+    try:
+        data = request.get_json()
+        prompt_name = data.get('prompt_name')
+        
+        if not prompt_name:
+            return jsonify({'error': 'prompt_name é obrigatório'}), 400
+        
+        validation = prompt_loader.validate_prompt(prompt_name)
+        
+        return jsonify(validation)
+    except Exception as e:
+        print(f"Erro ao validar prompt: {e}")
+        return jsonify({'error': str(e)}), 500
 
 def process_videos_batch(urls):
     """Processar lista de URLs em batch"""
