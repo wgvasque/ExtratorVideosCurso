@@ -308,15 +308,16 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
                 print(f"[OK] Gemini funcionou! Modelo: {res.get('model', 'unknown')}")
         except Exception as e:
             # Gravar exceção geral
+            error_msg = str(e).encode('ascii', 'replace').decode('ascii')
             gemini_error_detail = {
-                "error": f"Exceção: {str(e)}",
+                "error": f"Exceção: {error_msg}",
                 "model": "",
                 "origin": "exception",
                 "timestamp": datetime.datetime.now().isoformat()
             }
-            errors_by_stage["summarize"] = f"Exceção na sumarização: {e}"
-            print(f"[ERRO] Exceção na sumarização: {e}")
-            res = {"data": {}, "error": str(e), "model": "", "prompt": "", "raw": "", "origin": "error"}
+            errors_by_stage["summarize"] = f"Exceção na sumarização: {error_msg}"
+            print(f"[ERRO] Exceção na sumarização: {error_msg}")
+            res = {"data": {}, "error": error_msg, "model": "", "prompt": "", "raw": "", "origin": "error"}
         
         # Processar resultado (comum para ambos os casos)
         gm = res["model"] if isinstance(res, dict) else ""
@@ -447,6 +448,32 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         if openrouter_error_detail:
             data["openrouter_error_detail"] = openrouter_error_detail
             print(f"[INFO] Erro do OpenRouter gravado: {openrouter_error_detail['error'][:100]}")
+        
+        # Salvar arquivo de debug PRIMEIRO (antes do JSON principal)
+        # Isso garante que temos os dados de debug mesmo se o salvamento principal falhar
+        try:
+            debug_dir = sum_base
+            debug_path = os.path.join(debug_dir, f"prompt_debug_{cid}.json")
+            debug_data = {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "url": u,
+                "video_id": cid,
+                "modelo_usado": res.get("model", ""),
+                "origin": res.get("origin", ""),
+                "transcricao_completa": transcricao_texto,
+                "transcricao_chars": len(transcricao_texto),
+                "prompt_usado": res.get("prompt", ""),
+                "prompt_chars": len(res.get("prompt", "")),
+                "resposta_bruta": res.get("raw", ""),
+                "resposta_chars": len(res.get("raw", "")),
+                "sucesso": bool(data.get("resumo_executivo") or data.get("resumo_conciso")),
+                "erro": res.get("error", ""),
+            }
+            with open(debug_path, 'w', encoding='utf-8') as f:
+                json.dump(debug_data, f, ensure_ascii=False, indent=2)
+            print(f"[DEBUG] Arquivo de debug salvo: {debug_path}")
+        except Exception as debug_err:
+            print(f"[AVISO] Erro ao salvar debug JSON: {debug_err}")
         
         # Salvar JSON completo
         print(f"[DEBUG] Tentando salvar JSON em: {jpath}")
