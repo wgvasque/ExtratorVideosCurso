@@ -380,8 +380,9 @@ function templateV2SolarPop(reportData) {
                     selector.appendChild(option);
                 });
                 
-                // Selecionar o prompt usado atualmente (passado do Python)
-                const currentPrompt = '${htmlEscape(str(data.get("prompt_model_usado") or data.get("_modelo") or ""))}';
+                // Selecionar o prompt usado atualmente (não disponível no client-side)
+                // O prompt usado está visível no badge do header do relatório
+                const currentPrompt = '';
                 if (currentPrompt) {
                     Array.from(selector.options).forEach(opt => {
                         if (opt.value === currentPrompt) opt.selected = true;
