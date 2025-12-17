@@ -328,8 +328,29 @@ document.addEventListener('DOMContentLoaded', () => {
             refreshBtn.innerHTML = '⏳ Capturando...';
             refreshBtn.disabled = true;
 
+            // Timeout de 10 segundos
+            const timeout = setTimeout(() => {
+                refreshBtn.innerHTML = '⏱️ Timeout';
+                setTimeout(() => {
+                    refreshBtn.innerHTML = originalText;
+                    refreshBtn.disabled = false;
+                }, 2000);
+            }, 10000);
+
             // Solicitar ao background para forçar nova captura
             chrome.runtime.sendMessage({ action: 'forceRecapture' }, (response) => {
+                clearTimeout(timeout);
+
+                if (chrome.runtime.lastError) {
+                    console.error('[Popup] Erro ao enviar mensagem:', chrome.runtime.lastError);
+                    refreshBtn.innerHTML = '❌ Erro';
+                    setTimeout(() => {
+                        refreshBtn.innerHTML = originalText;
+                        refreshBtn.disabled = false;
+                    }, 2000);
+                    return;
+                }
+
                 if (response && response.success) {
                     refreshBtn.innerHTML = '✅ Capturado!';
                     setTimeout(() => {
@@ -339,6 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }, 1000);
                 } else {
                     refreshBtn.innerHTML = '❌ Erro';
+                    console.error('[Popup] Erro na resposta:', response);
                     setTimeout(() => {
                         refreshBtn.innerHTML = originalText;
                         refreshBtn.disabled = false;
