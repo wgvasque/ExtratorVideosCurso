@@ -372,57 +372,79 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Recuperar sessão ao abrir popup
-    chrome.storage.local.get(['currentSession']).then((st) => {
-        const sess = st.currentSession;
-        if (sess && (sess.status === 'processing' || sess.processing)) {
-            const processingSection = document.getElementById('processing-section');
-            const processingTitle = document.getElementById('processing-title');
-            const processingStatus = document.getElementById('processing-status');
-            const progressFill = document.getElementById('progress-fill');
-            const processingResult = document.getElementById('processing-result');
-            const processingTimer = document.getElementById('processing-timer');
-            const videoUrlEl = document.getElementById('video-url');
+    // Recuperar sessão ao abrir popup e ouvir mudanças
+    function checkAndRestoreSession() {
+        chrome.storage.local.get(['currentSession']).then((st) => {
+            const sess = st.currentSession;
+            if (sess && (sess.status === 'processing' || sess.processing)) {
 
-            processingSection.style.display = 'block';
-            processingResult.style.display = 'none';
-            processingTitle.textContent = '⏳ Processando...';
-            processingStatus.textContent = sess.currentStep || 'Retomando sessão...';
-            progressFill.style.width = (sess.progress || 0) + '%';
-
-            // Restaurar URL do vídeo
-            if (videoUrlEl && sess.pageUrl) {
-                videoUrlEl.textContent = sess.pageUrl;
-            }
-
-            // Restaurar timer baseado no startedAtISO da sessão
-            if (sess.startedAtISO) {
-                processingStartTime = new Date(sess.startedAtISO).getTime();
-            } else {
-                processingStartTime = Date.now();
-            }
-
-            if (timerInterval) clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - processingStartTime) / 1000);
-                const mins = Math.floor(elapsed / 60);
-                const secs = elapsed % 60;
-                const hours = Math.floor(mins / 60);
-                const displayMins = mins % 60;
-                if (processingTimer) {
-                    if (hours > 0) {
-                        processingTimer.textContent = `⏱ ${String(hours).padStart(2, '0')}:${String(displayMins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-                    } else {
-                        processingTimer.textContent = `⏱ ${String(displayMins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-                    }
+                // Se UI já estiver visível, não fazer nada (evitar reset)
+                if (document.getElementById('processing-section').style.display === 'block') {
+                    return;
                 }
-            }, 1000);
 
-            // iniciar refresh local
-            startProgressPolling(sess.pageUrl, { disabled: true, textContent: '⏳ Processando...' }, async (path, opts) => {
-                // apenas leitura do status via storage; evita chamadas extras
-                return await fetch(API_HOSTS[1] + '/api/status', { method: 'GET', cache: 'no-store' });
-            });
+                const processingSection = document.getElementById('processing-section');
+                const processingTitle = document.getElementById('processing-title');
+                const processingStatus = document.getElementById('processing-status');
+                const progressFill = document.getElementById('progress-fill');
+                const processingResult = document.getElementById('processing-result');
+                const processingTimer = document.getElementById('processing-timer');
+                const videoUrlEl = document.getElementById('video-url');
+
+                processingSection.style.display = 'block';
+                processingResult.style.display = 'none';
+                processingTitle.textContent = '⏳ Processando...';
+                processingStatus.textContent = sess.currentStep || 'Retomando sessão...';
+                progressFill.style.width = (sess.progress || 0) + '%';
+
+                // Restaurar URL do vídeo
+                if (videoUrlEl && sess.pageUrl) {
+                    videoUrlEl.textContent = sess.pageUrl;
+                }
+
+                // Restaurar timer baseado no startedAtISO da sessão
+                if (sess.startedAtISO) {
+                    processingStartTime = new Date(sess.startedAtISO).getTime();
+                } else {
+                    processingStartTime = Date.now();
+                }
+
+                if (timerInterval) clearInterval(timerInterval);
+                timerInterval = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - processingStartTime) / 1000);
+                    const mins = Math.floor(elapsed / 60);
+                    const secs = elapsed % 60;
+                    const hours = Math.floor(mins / 60);
+                    const displayMins = mins % 60;
+                    if (processingTimer) {
+                        if (hours > 0) {
+                            processingTimer.textContent = `⏱ ${String(hours).padStart(2, '0')}:${String(displayMins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                        } else {
+                            processingTimer.textContent = `⏱ ${String(displayMins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                        }
+                    }
+                }, 1000);
+
+                // iniciar polling de status
+                const mockButton = { disabled: true, textContent: '⏳ Processando...', style: {} };
+                startProgressPolling(sess.pageUrl, mockButton, async (path, opts) => {
+                    return await fetch('http://localhost:5000' + path, { method: 'GET', cache: 'no-store' });
+                });
+            }
+        });
+    }
+
+    // Verificar ao carregar
+    checkAndRestoreSession();
+
+    // Ouvir mudanças no storage (para reagir ao auto-process com popup aberto)
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+        if (namespace === 'local' && changes.currentSession) {
+            const newValue = changes.currentSession.newValue;
+            if (newValue && newValue.status === 'processing') {
+                checkAndRestoreSession();
+            }
         }
     });
+
 });
