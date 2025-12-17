@@ -66,10 +66,22 @@ function extractSupportMaterials() {
         }
     });
 
-    // Remover duplicatas
-    const uniqueMaterials = materials.filter((material, index, self) =>
-        index === self.findIndex(m => m.url === material.url)
-    );
+    // Remover duplicatas por URL E por texto similar
+    const uniqueMaterials = [];
+    const seenUrls = new Set();
+    const seenTexts = new Set();
+
+    materials.forEach(material => {
+        const normalizedUrl = material.url.split('?')[0].split('#')[0]; // Remove query params e hash
+        const normalizedText = material.text.toLowerCase().trim();
+
+        // Só adicionar se URL base E texto forem únicos
+        if (!seenUrls.has(normalizedUrl) && !seenTexts.has(normalizedText)) {
+            seenUrls.add(normalizedUrl);
+            seenTexts.add(normalizedText);
+            uniqueMaterials.push(material);
+        }
+    });
 
     return uniqueMaterials;
 }
