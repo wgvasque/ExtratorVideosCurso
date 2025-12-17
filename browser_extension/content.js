@@ -196,22 +196,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Retornar true para indicar resposta assíncrona
         return true;
     }
-    return true; // Manter canal aberto para resposta assíncrona
+    // Para outras mensagens, NÃO retornar true se não for responder
+    return false;
 });
 
 // Extrair metadados automaticamente quando a página carregar
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        const metadata = extractPageMetadata();
+const autoExtract = async () => {
+    try {
+        const metadata = await extractPageMetadata();
         chrome.runtime.sendMessage({
             action: 'pageMetadataExtracted',
             metadata
         });
-    });
+    } catch (e) {
+        console.error('[Video Extractor] Erro na extração automática:', e);
+    }
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', autoExtract);
 } else {
-    const metadata = extractPageMetadata();
-    chrome.runtime.sendMessage({
-        action: 'pageMetadataExtracted',
-        metadata
-    });
+    autoExtract();
 }
