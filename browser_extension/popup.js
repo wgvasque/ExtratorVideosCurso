@@ -59,8 +59,8 @@ function loadManifests() {
                     ${materialsHtml}
                     <div class="manifest-actions" style="margin-top: 10px;">
                         <button class="btn btn-info btn-sm refresh-btn" 
-                                title="Atualizar metadados da página">
-                            🔄 Atualizar
+                                title="Recarregar informações da página (título, materiais)">
+                            🔄 Recarregar Info
                         </button>
                         <button class="btn ${isExpired ? 'btn-secondary' : 'btn-primary'} btn-sm process-btn" 
                                 data-url="${m.pageUrl}" 
