@@ -481,59 +481,49 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       }
 
       try {
-        console.log('[Video Extractor] Injetando content script na aba:', tabId);
+        console.log('[Video Extractor] Solicitando metadados da aba:', tabId);
 
-        // Injetar content script para extrair metadados
-        await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['content.js']
+        // Content script já está carregado automaticamente via manifest.json
+        // Apenas enviar mensagem diretamente
+        chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (metadata) => {
+          // Verificar erro de runtime
+          if (chrome.runtime.lastError) {
+            console.error('[Video Extractor] Erro ao enviar mensagem:', chrome.runtime.lastError.message);
+            sendResponse({ success: false, error: 'Content script não respondeu: ' + chrome.runtime.lastError.message });
+            return;
+          }
+
+          console.log('[Video Extractor] Resposta recebida:', metadata);
+
+          if (metadata && metadata.success) {
+            // Criar novo manifest com metadados
+            const capture = {
+              pageUrl: pageUrl,
+              manifestUrl: '', // Será preenchido quando detectar o manifest
+              timestamp: new Date().toISOString(),
+              domain: new URL(pageUrl).hostname,
+              source: 'manual',
+              pageTitle: metadata.metadata.pageTitle || tab.title || '',
+              videoTitle: metadata.metadata.videoTitle || '',
+              supportMaterials: metadata.metadata.supportMaterials || []
+            };
+
+            // Salvar como último manifest
+            lastManifest = capture;
+            chrome.storage.local.set({ lastManifest });
+            chrome.action.setBadgeText({ text: '1' });
+            chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+
+            console.log('[Video Extractor] Captura manual realizada:', capture);
+            sendResponse({ success: true, manifest: capture });
+          } else {
+            console.error('[Video Extractor] Metadados inválidos:', metadata);
+            sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
+          }
         });
-
-        console.log('[Video Extractor] Content script injetado, aguardando 500ms...');
-
-        // Aguardar um pouco para o script carregar
-        setTimeout(() => {
-          console.log('[Video Extractor] Enviando mensagem extractMetadata...');
-
-          // Solicitar metadados
-          chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (metadata) => {
-            // Verificar erro de runtime
-            if (chrome.runtime.lastError) {
-              console.error('[Video Extractor] Erro ao enviar mensagem:', chrome.runtime.lastError.message);
-              sendResponse({ success: false, error: 'Content script não respondeu: ' + chrome.runtime.lastError.message });
-              return;
-            }
-
-            if (metadata && metadata.success) {
-              // Criar novo manifest com metadados
-              const capture = {
-                pageUrl: pageUrl,
-                manifestUrl: '', // Será preenchido quando detectar o manifest
-                timestamp: new Date().toISOString(),
-                domain: new URL(pageUrl).hostname,
-                source: 'manual',
-                pageTitle: metadata.metadata.pageTitle || tab.title || '',
-                videoTitle: metadata.metadata.videoTitle || '',
-                supportMaterials: metadata.metadata.supportMaterials || []
-              };
-
-              // Salvar como último manifest
-              lastManifest = capture;
-              chrome.storage.local.set({ lastManifest });
-              chrome.action.setBadgeText({ text: '1' });
-              chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
-
-              console.log('[Video Extractor] Captura manual realizada:', capture);
-              sendResponse({ success: true, manifest: capture });
-            } else {
-              console.error('[Video Extractor] Metadados inválidos:', metadata);
-              sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
-            }
-          });
-        }, 500);
       } catch (e) {
         console.error('[Video Extractor] Erro ao forçar captura:', e);
-        sendResponse({ success: false, error: 'Erro ao injetar script: ' + e.message });
+        sendResponse({ success: false, error: 'Erro: ' + e.message });
       }
     });
     return true; // Manter canal aberto para resposta assíncrona
