@@ -46,6 +46,11 @@ function loadManifests() {
                     <div class="manifest-video-title" style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 13px;">
                         🎬 ${videoTitle}
                     </div>
+                    <div class="manifest-page-url" style="font-size: 11px; color: #059669; margin: 4px 0; word-break: break-all;">
+                        🔗 <a href="${m.pageUrl}" target="_blank" style="color: #059669; text-decoration: none;" title="Abrir página do vídeo">
+                            ${truncateUrl(m.pageUrl)}
+                        </a>
+                    </div>
                     <div class="manifest-url">${truncateUrl(m.manifestUrl)}</div>
                     <div class="manifest-time" style="color: ${isExpired ? '#f44336' : '#666'}">
                         📅 ${formatTime(m.timestamp)} (${timeText})
