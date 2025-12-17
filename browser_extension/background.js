@@ -3,8 +3,9 @@
 const API_URL = 'http://localhost:5000/api/capture-manifest';
 const API_HOSTS = ['http://localhost:5000', 'http://127.0.0.1:5000'];
 
-// Armazenar somente o último manifest capturado
-let lastManifest = null;
+// Armazenar array de manifests (máximo 10)
+let manifests = [];
+const MAX_MANIFESTS = 10;
 
 // Debouncing para evitar capturas duplicadas
 let lastCaptureKey = '';
@@ -12,6 +13,43 @@ let lastCaptureTime = 0;
 const DEBOUNCE_MS = 30000; // 30 segundos entre capturas do mesmo vídeo
 let pollTimer = null;
 let currentSession = null;
+
+// Função para adicionar ou atualizar manifest no array
+function addOrUpdateManifest(newManifest) {
+  // Procurar manifest existente com mesma pageUrl
+  const existingIndex = manifests.findIndex(m => m.pageUrl === newManifest.pageUrl);
+
+  if (existingIndex !== -1) {
+    // Atualizar manifest existente
+    manifests[existingIndex] = { ...manifests[existingIndex], ...newManifest };
+    console.log('[Video Extractor] Manifest atualizado:', newManifest.pageUrl);
+  } else {
+    // Adicionar novo manifest
+    manifests.unshift(newManifest); // Adicionar no início (mais recente primeiro)
+    console.log('[Video Extractor] Novo manifest adicionado:', newManifest.pageUrl);
+
+    // Limitar a MAX_MANIFESTS (remover mais antigo)
+    if (manifests.length > MAX_MANIFESTS) {
+      const removed = manifests.pop();
+      console.log('[Video Extractor] Manifest mais antigo removido:', removed.pageUrl);
+    }
+  }
+
+  // Salvar no storage
+  chrome.storage.local.set({ manifests });
+
+  // Atualizar badge com contagem
+  chrome.action.setBadgeText({ text: manifests.length.toString() });
+  chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+
+  return manifests[existingIndex !== -1 ? existingIndex : 0];
+}
+
+// Função para obter manifest por URL
+function getManifestByUrl(pageUrl) {
+  return manifests.find(m => m.pageUrl === pageUrl) || null;
+}
+
 
 async function tryFetch(path, opts) {
   let firstNonOk = null;
@@ -259,8 +297,9 @@ function captureManifest(manifestUrl, tabId, source = 'unknown') {
       const now = Date.now();
       if (captureKey === lastCaptureKey && (now - lastCaptureTime) < DEBOUNCE_MS) {
         // Permitir upgrade de query param para JWT path
-        const prevIsQuery = !!(lastManifest && lastManifest.pageUrl === pageUrl &&
-          String(lastManifest.manifestUrl || '').includes('?p='));
+        const existingManifest = getManifestByUrl(pageUrl);
+        const prevIsQuery = !!(existingManifest && existingManifest.pageUrl === pageUrl &&
+          String(existingManifest.manifestUrl || '').includes('?p='));
         if (!(isCloudflareJwt && prevIsQuery)) {
           console.log('[Video Extractor] Ignorando captura duplicada (debounce)');
           return;
@@ -282,21 +321,23 @@ function captureManifest(manifestUrl, tabId, source = 'unknown') {
         supportMaterials: []
       };
 
-      // Guardar somente o último manifest
-      lastManifest = capture;
-      chrome.storage.local.set({ lastManifest });
+      // Adicionar ou atualizar manifest no array
+      addOrUpdateManifest(capture);
 
       // Solicitar metadados do content script
       chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (response) => {
         if (response && response.success && response.metadata) {
           // Atualizar capture com metadados
-          lastManifest.pageTitle = response.metadata.pageTitle || lastManifest.pageTitle;
-          lastManifest.videoTitle = response.metadata.videoTitle || '';
-          lastManifest.supportMaterials = response.metadata.supportMaterials || [];
-          chrome.storage.local.set({ lastManifest });
+          const updated = {
+            ...capture,
+            pageTitle: response.metadata.pageTitle || capture.pageTitle,
+            videoTitle: response.metadata.videoTitle || '',
+            supportMaterials: response.metadata.supportMaterials || []
+          };
+          addOrUpdateManifest(updated);
           console.log('[Video Extractor] Metadados atualizados:', {
-            videoTitle: lastManifest.videoTitle,
-            materials: lastManifest.supportMaterials.length
+            videoTitle: updated.videoTitle,
+            materials: updated.supportMaterials.length
           });
         }
       });
@@ -353,10 +394,21 @@ async function sendToAPI(capture) {
   }
 }
 
-// Carregar último manifest salvo ao iniciar
-chrome.storage.local.get(['lastManifest'], function (result) {
-  if (result.lastManifest) {
-    lastManifest = result.lastManifest;
+
+// Carregar manifests salvos ao iniciar (com migração de lastManifest antigo)
+chrome.storage.local.get(['manifests', 'lastManifest'], function (result) {
+  if (result.manifests && Array.isArray(result.manifests)) {
+    // Carregar array de manifests
+    manifests = result.manifests;
+    console.log('[Video Extractor] Carregados', manifests.length, 'manifests');
+    chrome.action.setBadgeText({ text: manifests.length > 0 ? manifests.length.toString() : '' });
+    chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+  } else if (result.lastManifest) {
+    // Migrar lastManifest antigo para array
+    console.log('[Video Extractor] Migrando lastManifest antigo para array');
+    manifests = [result.lastManifest];
+    chrome.storage.local.set({ manifests });
+    chrome.storage.local.remove('lastManifest'); // Remover antigo
     chrome.action.setBadgeText({ text: '1' });
     chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
   } else {
@@ -373,15 +425,16 @@ chrome.storage.local.get(['lastManifest'], function (result) {
 // Listener para mensagens do popup
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.action === 'getManifests') {
-    sendResponse({ manifests: lastManifest ? [lastManifest] : [] });
+    sendResponse({ manifests: manifests });
   } else if (request.action === 'clearManifests') {
-    lastManifest = null;
-    chrome.storage.local.set({ lastManifest: null });
+    manifests = [];
+    chrome.storage.local.set({ manifests: [] });
     chrome.action.setBadgeText({ text: '' });
     sendResponse({ success: true });
   } else if (request.action === 'startPolling') {
     const pageUrl = request.pageUrl;
-    const manifestUrl = request.manifestUrl || (lastManifest && lastManifest.manifestUrl) || '';
+    const existingManifest = getManifestByUrl(pageUrl);
+    const manifestUrl = request.manifestUrl || (existingManifest && existingManifest.manifestUrl) || '';
     currentSession = {
       pageUrl,
       manifestUrl,
@@ -400,12 +453,19 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     sendResponse({ success: true });
   } else if (request.action === 'pageMetadataExtracted') {
     // Content script enviou metadados automaticamente
-    if (lastManifest && request.metadata) {
-      lastManifest.pageTitle = request.metadata.pageTitle || lastManifest.pageTitle;
-      lastManifest.videoTitle = request.metadata.videoTitle || '';
-      lastManifest.supportMaterials = request.metadata.supportMaterials || [];
-      chrome.storage.local.set({ lastManifest });
-      console.log('[Video Extractor] Metadados recebidos automaticamente');
+    const pageUrl = request.metadata?.pageUrl;
+    if (pageUrl && request.metadata) {
+      const existingManifest = getManifestByUrl(pageUrl);
+      if (existingManifest) {
+        const updated = {
+          ...existingManifest,
+          pageTitle: request.metadata.pageTitle || existingManifest.pageTitle,
+          videoTitle: request.metadata.videoTitle || '',
+          supportMaterials: request.metadata.supportMaterials || []
+        };
+        addOrUpdateManifest(updated);
+        console.log('[Video Extractor] Metadados recebidos automaticamente');
+      }
     }
   } else if (request.action === 'refreshMetadata') {
     // Popup solicitou atualização de metadados
@@ -430,12 +490,21 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
               setTimeout(() => {
                 // Tentar novamente
                 chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (response2) => {
-                  if (response2 && response2.success && response2.metadata && lastManifest) {
-                    lastManifest.pageTitle = response2.metadata.pageTitle || lastManifest.pageTitle;
-                    lastManifest.videoTitle = response2.metadata.videoTitle || '';
-                    lastManifest.supportMaterials = response2.metadata.supportMaterials || [];
-                    chrome.storage.local.set({ lastManifest });
-                    sendResponse({ success: true, metadata: response2.metadata });
+                  if (response2 && response2.success && response2.metadata) {
+                    const pageUrl = tabs[0].url;
+                    const existingManifest = getManifestByUrl(pageUrl);
+                    if (existingManifest) {
+                      const updated = {
+                        ...existingManifest,
+                        pageTitle: response2.metadata.pageTitle || existingManifest.pageTitle,
+                        videoTitle: response2.metadata.videoTitle || '',
+                        supportMaterials: response2.metadata.supportMaterials || []
+                      };
+                      addOrUpdateManifest(updated);
+                      sendResponse({ success: true, metadata: response2.metadata });
+                    } else {
+                      sendResponse({ success: false, error: 'Manifest não encontrado' });
+                    }
                   } else {
                     sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
                   }
@@ -445,13 +514,22 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
               console.error('[Video Extractor] Erro ao injetar script:', e);
               sendResponse({ success: false, error: 'Erro ao injetar content script: ' + e.message });
             }
-          } else if (response && response.success && response.metadata && lastManifest) {
+          } else if (response && response.success && response.metadata) {
             // Content script já estava carregado
-            lastManifest.pageTitle = response.metadata.pageTitle || lastManifest.pageTitle;
-            lastManifest.videoTitle = response.metadata.videoTitle || '';
-            lastManifest.supportMaterials = response.metadata.supportMaterials || [];
-            chrome.storage.local.set({ lastManifest });
-            sendResponse({ success: true, metadata: response.metadata });
+            const pageUrl = tabs[0].url;
+            const existingManifest = getManifestByUrl(pageUrl);
+            if (existingManifest) {
+              const updated = {
+                ...existingManifest,
+                pageTitle: response.metadata.pageTitle || existingManifest.pageTitle,
+                videoTitle: response.metadata.videoTitle || '',
+                supportMaterials: response.metadata.supportMaterials || []
+              };
+              addOrUpdateManifest(updated);
+              sendResponse({ success: true, metadata: response.metadata });
+            } else {
+              sendResponse({ success: false, error: 'Manifest não encontrado' });
+            }
           } else {
             sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
           }
@@ -545,11 +623,8 @@ function processMetadata(metadata, tab, pageUrl, sendResponse) {
       supportMaterials: metadata.metadata.supportMaterials || []
     };
 
-    // Salvar como último manifest
-    lastManifest = capture;
-    chrome.storage.local.set({ lastManifest });
-    chrome.action.setBadgeText({ text: '1' });
-    chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+    // Adicionar ou atualizar manifest no array
+    addOrUpdateManifest(capture);
 
     console.log('[Video Extractor] Captura manual realizada:', capture);
     sendResponse({ success: true, manifest: capture });
