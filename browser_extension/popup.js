@@ -258,10 +258,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // Carregar prompts disponíveis
     loadPrompts();
 
-    // Refresh button
+
+    // Refresh button - força nova captura da aba ativa
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', loadManifests);
+        refreshBtn.addEventListener('click', function () {
+            const originalText = refreshBtn.innerHTML;
+            refreshBtn.innerHTML = '⏳ Capturando...';
+            refreshBtn.disabled = true;
+
+            // Solicitar ao background para forçar nova captura
+            chrome.runtime.sendMessage({ action: 'forceRecapture' }, (response) => {
+                if (response && response.success) {
+                    refreshBtn.innerHTML = '✅ Capturado!';
+                    setTimeout(() => {
+                        loadManifests();
+                        refreshBtn.innerHTML = originalText;
+                        refreshBtn.disabled = false;
+                    }, 1000);
+                } else {
+                    refreshBtn.innerHTML = '❌ Erro';
+                    setTimeout(() => {
+                        refreshBtn.innerHTML = originalText;
+                        refreshBtn.disabled = false;
+                    }, 2000);
+                }
+            });
+        });
     }
 
     // Clear button

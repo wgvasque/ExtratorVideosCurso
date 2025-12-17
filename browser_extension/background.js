@@ -461,6 +461,68 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       }
     });
     return true; // Manter canal aberto para resposta assíncrona
+  } else if (request.action === 'forceRecapture') {
+    // Popup solicitou captura forçada da aba ativa
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (!tabs[0]) {
+        sendResponse({ success: false, error: 'Nenhuma aba ativa' });
+        return;
+      }
+
+      const tab = tabs[0];
+      const tabId = tab.id;
+      const pageUrl = tab.url;
+
+      // Verificar se é uma página válida (não chrome://, about:, etc)
+      if (!pageUrl || pageUrl.startsWith('chrome://') || pageUrl.startsWith('about:') ||
+        pageUrl.startsWith('chrome-extension://')) {
+        sendResponse({ success: false, error: 'Página não suportada' });
+        return;
+      }
+
+      try {
+        // Injetar content script para extrair metadados
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          files: ['content.js']
+        });
+
+        // Aguardar um pouco para o script carregar
+        setTimeout(() => {
+          // Solicitar metadados
+          chrome.tabs.sendMessage(tabId, { action: 'extractMetadata' }, (metadata) => {
+            if (metadata && metadata.success) {
+              // Criar novo manifest com metadados
+              const capture = {
+                pageUrl: pageUrl,
+                manifestUrl: '', // Será preenchido quando detectar o manifest
+                timestamp: new Date().toISOString(),
+                domain: new URL(pageUrl).hostname,
+                source: 'manual',
+                pageTitle: metadata.metadata.pageTitle || tab.title || '',
+                videoTitle: metadata.metadata.videoTitle || '',
+                supportMaterials: metadata.metadata.supportMaterials || []
+              };
+
+              // Salvar como último manifest
+              lastManifest = capture;
+              chrome.storage.local.set({ lastManifest });
+              chrome.action.setBadgeText({ text: '1' });
+              chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+
+              console.log('[Video Extractor] Captura manual realizada:', capture);
+              sendResponse({ success: true, manifest: capture });
+            } else {
+              sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
+            }
+          });
+        }, 500);
+      } catch (e) {
+        console.error('[Video Extractor] Erro ao forçar captura:', e);
+        sendResponse({ success: false, error: 'Erro ao injetar script: ' + e.message });
+      }
+    });
+    return true; // Manter canal aberto para resposta assíncrona
   }
   return true;
 });
