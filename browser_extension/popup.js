@@ -1,32 +1,36 @@
 // Script do popup - Video Processor Pro Extension
 
 function loadManifests() {
-    chrome.runtime.sendMessage({ action: 'getManifests' }, function (response) {
-        const manifests = response.manifests || [];
-        const listDiv = document.getElementById('manifestList');
+    // Obter URL da aba atual para destacar
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const currentTabUrl = tabs[0]?.url || '';
 
-        if (manifests.length === 0) {
-            listDiv.innerHTML = `
+        chrome.runtime.sendMessage({ action: 'getManifests' }, function (response) {
+            const manifests = response.manifests || [];
+            const listDiv = document.getElementById('manifestList');
+
+            if (manifests.length === 0) {
+                listDiv.innerHTML = `
                 <div class="empty-state">
                     <div class="icon">🎬</div>
                     <p>Nenhum vídeo capturado ainda.<br>Acesse uma página com vídeo!</p>
                 </div>
             `;
-            return;
-        }
+                return;
+            }
 
-        listDiv.innerHTML = manifests.map((m, index) => {
-            const capturedDate = new Date(m.timestamp);
-            const now = new Date();
-            const minutesAgo = Math.floor((now - capturedDate) / 60000);
-            const isExpired = minutesAgo > 2;
-            const statusClass = isExpired ? 'expired' : (minutesAgo > 1 ? 'warning' : 'fresh');
-            const timeText = minutesAgo === 0 ? 'agora' : `${minutesAgo}min atrás`;
+            listDiv.innerHTML = manifests.map((m, index) => {
+                const capturedDate = new Date(m.timestamp);
+                const now = new Date();
+                const minutesAgo = Math.floor((now - capturedDate) / 60000);
+                const isExpired = minutesAgo > 2;
+                const statusClass = isExpired ? 'expired' : (minutesAgo > 1 ? 'warning' : 'fresh');
+                const timeText = minutesAgo === 0 ? 'agora' : `${minutesAgo}min atrás`;
 
-            // Metadados adicionais
-            const videoTitle = m.videoTitle || m.pageTitle || m.domain || 'Título não detectado';
-            const hasMaterials = m.supportMaterials && m.supportMaterials.length > 0;
-            const materialsHtml = hasMaterials ? `
+                // Metadados adicionais
+                const videoTitle = m.videoTitle || m.pageTitle || m.domain || 'Título não detectado';
+                const hasMaterials = m.supportMaterials && m.supportMaterials.length > 0;
+                const materialsHtml = hasMaterials ? `
                 <div class="manifest-materials" style="margin-top: 8px; padding: 8px; background: #f0f9ff; border-left: 3px solid #0ea5e9; border-radius: 4px;">
                     <strong style="font-size: 11px; color: #0369a1;">📎 Material de Apoio (${m.supportMaterials.length}):</strong>
                     ${m.supportMaterials.slice(0, 3).map(mat => `
@@ -40,12 +44,12 @@ function loadManifests() {
                 </div>
             ` : '';
 
-            // Verificar se tem manifestUrl (m3u8)
-            const hasManifestUrl = m.manifestUrl && m.manifestUrl.trim() !== '';
+                // Verificar se tem manifestUrl (m3u8)
+                const hasManifestUrl = m.manifestUrl && m.manifestUrl.trim() !== '';
 
-            // Se não tem m3u8, mostrar aviso
-            if (!hasManifestUrl) {
-                return `
+                // Se não tem m3u8, mostrar aviso
+                if (!hasManifestUrl) {
+                    return `
                     <div class="manifest-item" style="border-left: 4px solid #ff9800; background: #fff3e0;">
                         <div class="manifest-domain">🌐 ${m.domain}</div>
                         <div class="manifest-video-title" style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 13px;">
@@ -77,11 +81,16 @@ function loadManifests() {
                         </div>
                     </div>
                 `;
-            }
+                }
 
-            return `
-                <div class="manifest-item" style="border-left: 4px solid ${isExpired ? '#f44336' : (minutesAgo > 1 ? '#ff9800' : '#4CAF50')}">
-                    <div class="manifest-domain">🌐 ${m.domain}</div>
+
+                // Verificar se é a aba atual
+                const isCurrentTab = m.pageUrl === currentTabUrl;
+                const currentTabBadge = isCurrentTab ? '👉 <span style="background: #4ECDC4; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700;">ABA ATUAL</span> ' : '';
+
+                return `
+                <div class="manifest-item" style="border-left: 4px solid ${isExpired ? '#f44336' : (minutesAgo > 1 ? '#ff9800' : '#4CAF50')}; ${isCurrentTab ? 'background: #f0fdfa; box-shadow: 0 0 0 2px #4ECDC4;' : ''}">
+                    <div class="manifest-domain">🌐 ${m.domain} ${currentTabBadge}</div>
                     <div class="manifest-video-title" style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 13px;">
                         🎬 ${videoTitle}
                     </div>
@@ -116,69 +125,70 @@ function loadManifests() {
                     </div>
                 </div>
             `;
-        }).join('');
+            }).join('');
 
-        // Event listeners para botões de atualizar
-        document.querySelectorAll('.refresh-btn').forEach(btn => {
-            btn.addEventListener('click', function () {
-                refreshMetadata(this);
-            });
-        });
-
-        // Event listeners para botões de copiar
-        document.querySelectorAll('.test-btn').forEach(btn => {
-            btn.addEventListener('click', function () {
-                const url = this.getAttribute('data-url');
-                navigator.clipboard.writeText(url).then(() => {
-                    const originalText = this.innerHTML;
-                    this.innerHTML = '✅ Copiado!';
-                    setTimeout(() => {
-                        this.innerHTML = originalText;
-                    }, 2000);
-                }).catch(err => {
-                    console.error('Erro ao copiar:', err);
-                    this.innerHTML = '❌ Erro';
+            // Event listeners para botões de atualizar
+            document.querySelectorAll('.refresh-btn').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    refreshMetadata(this);
                 });
             });
-        });
 
-        // Event listeners para botões de processar
-        document.querySelectorAll('.process-btn').forEach(btn => {
-            btn.addEventListener('click', function () {
-                if (this.disabled) return;
-
-                const pageUrl = this.getAttribute('data-url');
-                const manifestUrl = this.getAttribute('data-manifest');
-
-                if (typeof processVideoWithUI === 'function') {
-                    processVideoWithUI(pageUrl, manifestUrl, this);
-                } else {
-                    console.error('processVideoWithUI não está definida');
-                }
-            });
-        });
-
-        // Event listeners para botões de recarregar página
-        document.querySelectorAll('.reload-page-btn').forEach(btn => {
-            btn.addEventListener('click', function () {
-                const originalText = this.innerHTML;
-                this.innerHTML = '⏳ Recarregando...';
-                this.disabled = true;
-
-                // Recarregar a aba ativa
-                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                    if (tabs[0]) {
-                        chrome.tabs.reload(tabs[0].id);
-
-                        // Mostrar modal informativo e fechar popup
+            // Event listeners para botões de copiar
+            document.querySelectorAll('.test-btn').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const url = this.getAttribute('data-url');
+                    navigator.clipboard.writeText(url).then(() => {
+                        const originalText = this.innerHTML;
+                        this.innerHTML = '✅ Copiado!';
                         setTimeout(() => {
-                            showInfoModal(
-                                '✅ Página Recarregada!',
-                                '📌 Aguarde o vídeo carregar e abra o popup novamente para ver o m3u8 capturado.',
-                                () => window.close()
-                            );
-                        }, 300);
+                            this.innerHTML = originalText;
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Erro ao copiar:', err);
+                        this.innerHTML = '❌ Erro';
+                    });
+                });
+            });
+
+            // Event listeners para botões de processar
+            document.querySelectorAll('.process-btn').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    if (this.disabled) return;
+
+                    const pageUrl = this.getAttribute('data-url');
+                    const manifestUrl = this.getAttribute('data-manifest');
+
+                    if (typeof processVideoWithUI === 'function') {
+                        processVideoWithUI(pageUrl, manifestUrl, this);
+                    } else {
+                        console.error('processVideoWithUI não está definida');
                     }
+                });
+            });
+
+            // Event listeners para botões de recarregar página
+            document.querySelectorAll('.reload-page-btn').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const originalText = this.innerHTML;
+                    this.innerHTML = '⏳ Recarregando...';
+                    this.disabled = true;
+
+                    // Recarregar a aba ativa
+                    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                        if (tabs[0]) {
+                            chrome.tabs.reload(tabs[0].id);
+
+                            // Mostrar modal informativo e fechar popup
+                            setTimeout(() => {
+                                showInfoModal(
+                                    '✅ Página Recarregada!',
+                                    '📌 Aguarde o vídeo carregar e abra o popup novamente para ver o m3u8 capturado.',
+                                    () => window.close()
+                                );
+                            }, 300);
+                        }
+                    });
                 });
             });
         });
