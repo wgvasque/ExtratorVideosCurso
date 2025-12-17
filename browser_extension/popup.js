@@ -103,13 +103,10 @@ function loadManifests() {
                 }
 
 
-                // Verificar se é a aba atual
-                const isCurrentTab = m.pageUrl === currentTabUrl;
-                const currentTabBadge = isCurrentTab ? '👉 <span style="background: #4ECDC4; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700;">ABA ATUAL</span> ' : '';
 
                 return `
-                <div class="manifest-item" style="border-left: 4px solid ${isExpired ? '#f44336' : (minutesAgo > 1 ? '#ff9800' : '#4CAF50')}; ${isCurrentTab ? 'background: #f0fdfa; box-shadow: 0 0 0 2px #4ECDC4;' : ''}">
-                    <div class="manifest-domain">🌐 ${m.domain} ${currentTabBadge}</div>
+                <div class="manifest-item" style="border-left: 4px solid ${isExpired ? '#f44336' : (minutesAgo > 1 ? '#ff9800' : '#4CAF50')}">
+                    <div class="manifest-domain">🌐 ${m.domain}</div>
                     <div class="manifest-video-title" style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 13px;">
                         🎬 ${videoTitle}
                     </div>
