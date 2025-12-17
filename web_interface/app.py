@@ -56,6 +56,8 @@ def index():
 @app.route('/view/<domain>/<video_id>')
 def view_report_standalone(domain, video_id):
     """Página standalone para visualizar relatório - igual ao modal da interface web"""
+    import time
+    timestamp = int(time.time())
     # Retornar página HTML que carrega JSON e renderiza com templates.js
     html = f'''<!DOCTYPE html>
 <html lang="pt-BR">
@@ -77,18 +79,33 @@ def view_report_standalone(domain, video_id):
         <div class="loading">⏳ Carregando relatório...</div>
     </div>
     
-    <script src="/static/js/templates.js?v=20251216i"></script>
+    <script src="/static/js/templates.js?v={timestamp}"></script>
     <script>
         const domain = "{domain}";
         const videoId = "{video_id}";
         
+        
         async function loadReport() {{
             try {{
-                const response = await fetch(`/api/report-data/${{domain}}/${{videoId}}`);
-                if (!response.ok) {{
+                // Tentar múltiplos hosts para funcionar da extensão
+                const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+                let reportData = null;
+                
+                for (const host of hosts) {{
+                    try {{
+                        const response = await fetch(host + '/api/report-data/' + domain + '/' + videoId);
+                        if (response.ok) {{
+                            reportData = await response.json();
+                            break;
+                        }}
+                    }} catch (e) {{
+                        continue;
+                    }}
+                }}
+                
+                if (!reportData) {{
                     throw new Error('Relatório não encontrado');
                 }}
-                const reportData = await response.json();
                 
                 // Atualizar título da página
                 document.title = reportData.meta?.title || 'Relatório';
