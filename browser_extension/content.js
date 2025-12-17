@@ -11,11 +11,32 @@ function extractVideoTitle() {
         () => document.querySelector('meta[property="og:title"]')?.content,
         // 2. Meta tag Twitter
         () => document.querySelector('meta[name="twitter:title"]')?.content,
-        // 3. Primeiro H1 da página
+        // 3. Hub.la - título abaixo do vídeo
+        () => {
+            if (window.location.hostname.includes('hub.la')) {
+                // Procurar por h1, h2, ou elementos comuns após o player
+                const selectors = [
+                    'h1.lesson-title',
+                    'h2.lesson-title',
+                    '.video-info h1',
+                    '.video-info h2',
+                    '.lesson-info h1',
+                    '.lesson-info h2',
+                    'div[class*="title"] h1',
+                    'div[class*="title"] h2'
+                ];
+                for (const sel of selectors) {
+                    const el = document.querySelector(sel);
+                    if (el) return el.textContent?.trim();
+                }
+            }
+            return null;
+        },
+        // 4. Primeiro H1 da página
         () => document.querySelector('h1')?.textContent?.trim(),
-        // 4. Título da página
+        // 5. Título da página
         () => document.title,
-        // 5. Seletores comuns de plataformas de curso
+        // 6. Seletores comuns de plataformas de curso
         () => document.querySelector('.video-title')?.textContent?.trim(),
         () => document.querySelector('.lesson-title')?.textContent?.trim(),
         () => document.querySelector('.course-title')?.textContent?.trim(),
