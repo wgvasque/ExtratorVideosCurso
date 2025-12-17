@@ -339,14 +339,21 @@ function captureManifest(manifestUrl, tabId, source = 'unknown') {
             videoTitle: updated.videoTitle,
             materials: updated.supportMaterials.length
           });
+
+          // Enviar para API após obter metadados completos
+          if (isValidManifest) {
+            sendToAPI(updated);
+          }
+        } else {
+          // Se não conseguir metadados, enviar mesmo assim
+          if (isValidManifest) {
+            sendToAPI(capture);
+          }
         }
       });
 
-      // Enviar para API local e atualizar badge
+      // Log de captura
       if (isValidManifest) {
-        sendToAPI(capture);
-        chrome.action.setBadgeText({ text: '1' });
-        chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
         console.log(`[Video Extractor] ✅ Capturado [${source}]:`, manifestUrl.slice(0, 80) + '...');
       } else {
         chrome.action.setBadgeText({ text: '?' });
