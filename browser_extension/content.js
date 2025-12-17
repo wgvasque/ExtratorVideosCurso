@@ -81,7 +81,7 @@ function extractSupportMaterials() {
     // Se mesma URL, manter o texto mais descritivo (mais curto e sem "...")
     const urlMap = new Map();
 
-    materials.forEach(material => {
+    filteredMaterials.forEach(material => {
         const normalizedUrl = material.url.split('?')[0].split('#')[0]; // Remove query params e hash
 
         if (!urlMap.has(normalizedUrl)) {
