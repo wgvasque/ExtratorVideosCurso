@@ -70,7 +70,21 @@ function extractSupportMaterials() {
 
         const hasExtension = extensions.some(ext => href.toLowerCase().endsWith(ext));
 
-        if (hasKeyword || hasExtension) {
+        // Verificar se está dentro de um editor de conteúdo (BlockNote, etc)
+        const isInContentEditor = link.closest('.bn-editor, .custom-blocknote-editor, .content-editor, .editor-content, [class*="editor"]');
+
+        // Verificar se é link externo (domínio diferente)
+        const currentDomain = window.location.hostname;
+        let isExternal = false;
+        try {
+            const linkUrl = new URL(href);
+            isExternal = linkUrl.hostname !== currentDomain;
+        } catch (e) {
+            // URL inválida, ignorar
+        }
+
+        // Adicionar se: tem keyword OU tem extensão OU (está em editor E é externo)
+        if (hasKeyword || hasExtension || (isInContentEditor && isExternal)) {
             materials.push({
                 url: href,
                 text: link.textContent?.trim() || 'Material de Apoio',
