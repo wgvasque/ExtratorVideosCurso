@@ -358,10 +358,24 @@ function templateV2SolarPop(reportData) {
             if (!selector) return;
             
             try {
-                const response = await fetch('/prompts', { cache: 'no-store' });
-                if (!response.ok) throw new Error('API indisponível');
+                // Tentar múltiplos hosts para funcionar da extensão
+                const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+                let data = null;
                 
-                const data = await response.json();
+                for (const host of hosts) {
+                    try {
+                        const response = await fetch(host + '/prompts', { cache: 'no-store' });
+                        if (response.ok) {
+                            data = await response.json();
+                            break;
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                }
+                
+                if (!data) throw new Error('API indisponível');
+                
                 const prompts = data.prompts || [];
                 
                 if (prompts.length === 0) {
