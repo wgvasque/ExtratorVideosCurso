@@ -66,24 +66,33 @@ function extractSupportMaterials() {
         }
     });
 
-    // Remover duplicatas por URL E por texto similar
-    const uniqueMaterials = [];
-    const seenUrls = new Set();
-    const seenTexts = new Set();
+    // Remover duplicatas por URL base (ignorando query params)
+    // Se mesma URL, manter o texto mais descritivo (mais curto e sem "...")
+    const urlMap = new Map();
 
     materials.forEach(material => {
         const normalizedUrl = material.url.split('?')[0].split('#')[0]; // Remove query params e hash
-        const normalizedText = material.text.toLowerCase().trim();
 
-        // Só adicionar se URL base E texto forem únicos
-        if (!seenUrls.has(normalizedUrl) && !seenTexts.has(normalizedText)) {
-            seenUrls.add(normalizedUrl);
-            seenTexts.add(normalizedText);
-            uniqueMaterials.push(material);
+        if (!urlMap.has(normalizedUrl)) {
+            // Primeira ocorrência desta URL
+            urlMap.set(normalizedUrl, material);
+        } else {
+            // URL duplicada - manter o texto melhor
+            const existing = urlMap.get(normalizedUrl);
+            const currentText = material.text;
+            const existingText = existing.text;
+
+            // Preferir texto mais curto e sem "..."
+            const currentScore = currentText.length + (currentText.includes('...') ? 100 : 0);
+            const existingScore = existingText.length + (existingText.includes('...') ? 100 : 0);
+
+            if (currentScore < existingScore) {
+                urlMap.set(normalizedUrl, material);
+            }
         }
     });
 
-    return uniqueMaterials;
+    return Array.from(urlMap.values());
 }
 
 // Função principal para extrair todos os metadados
