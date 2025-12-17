@@ -16,6 +16,7 @@ function extractVideoTitle() {
             if (window.location.hostname.includes('hub.la')) {
                 // Procurar por h1, h2, ou elementos comuns após o player
                 const selectors = [
+                    'h1',  // H1 genérico primeiro
                     'h1.lesson-title',
                     'h2.lesson-title',
                     '.video-info h1',
