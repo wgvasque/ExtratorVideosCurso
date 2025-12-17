@@ -42,8 +42,6 @@ function loadManifests() {
                 const capturedDate = new Date(m.timestamp);
                 const now = new Date();
                 const minutesAgo = Math.floor((now - capturedDate) / 60000);
-                const isExpired = minutesAgo > 2;
-                const statusClass = isExpired ? 'expired' : (minutesAgo > 1 ? 'warning' : 'fresh');
                 const timeText = minutesAgo === 0 ? 'agora' : `${minutesAgo}min atrás`;
 
                 // Metadados adicionais
@@ -105,7 +103,7 @@ function loadManifests() {
 
 
                 return `
-                <div class="manifest-item" style="border-left: 4px solid ${isExpired ? '#f44336' : (minutesAgo > 1 ? '#ff9800' : '#4CAF50')}">
+                <div class="manifest-item" style="border-left: 4px solid ${minutesAgo > 1 ? '#ff9800' : '#4CAF50'}">
                     <div class="manifest-domain">🌐 ${m.domain}</div>
                     <div class="manifest-video-title" style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 13px;">
                         🎬 ${videoTitle}
@@ -116,9 +114,8 @@ function loadManifests() {
                         </a>
                     </div>
                     <div class="manifest-url">${truncateUrl(m.manifestUrl)}</div>
-                    <div class="manifest-time" style="color: ${isExpired ? '#f44336' : '#666'}">
+                    <div class="manifest-time" style="color: #666">
                         📅 ${formatTime(m.timestamp)} (${timeText})
-                        ${isExpired ? ' ⚠️ EXPIRADO' : ''}
                     </div>
                     ${materialsHtml}
                     <div class="manifest-actions" style="margin-top: 10px;">
@@ -126,12 +123,11 @@ function loadManifests() {
                                 title="Recarregar informações da página (título, materiais)">
                             🔄 Recarregar Info
                         </button>
-                        <button class="btn ${isExpired ? 'btn-secondary' : 'btn-primary'} btn-sm process-btn" 
+                        <button class="btn btn-primary btn-sm process-btn" 
                                 data-url="${m.pageUrl}" 
                                 data-manifest="${m.manifestUrl}"
-                                title="Processar vídeo agora"
-                                ${isExpired ? 'disabled' : ''}>
-                            ${isExpired ? '⚠️ Expirado' : '▶️ Processar'}
+                                title="Processar vídeo agora">
+                            ▶️ Processar
                         </button>
                         <button class="btn btn-secondary btn-sm test-btn" 
                                 data-url="${m.manifestUrl}" 
