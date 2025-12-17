@@ -1,8 +1,16 @@
 import os
+import sys
 import google.generativeai as genai
 import re
 import json
 from . import prompt_loader
+
+# Configurar stdout para UTF-8 no Windows
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 def configure():
     key = os.getenv("GEMINI_API_KEY")
@@ -26,7 +34,7 @@ def load_prompt():
             with open(direct_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"⚠️ Erro ao carregar PROMPT_PATH={direct_path}: {e}")
+            print(f"[AVISO] Erro ao carregar PROMPT_PATH={direct_path}: {e}")
     
     # Verificar seleção de modelo
     prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
@@ -41,12 +49,12 @@ def load_prompt():
         with open(default_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"⚠️ Erro ao carregar {default_path}: {e}")
+        print(f"[AVISO] Erro ao carregar {default_path}: {e}")
         # Fallback para prompt_padrao.json
         try:
             fallback = "prompt_padrao.json"
             with open(fallback, "r", encoding="utf-8") as f:
-                print(f"✅ Usando fallback: {fallback}")
+                print(f"[OK] Usando fallback: {fallback}")
                 return json.load(f)
         except Exception:
             return None
