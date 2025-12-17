@@ -40,6 +40,45 @@ function loadManifests() {
                 </div>
             ` : '';
 
+            // Verificar se tem manifestUrl (m3u8)
+            const hasManifestUrl = m.manifestUrl && m.manifestUrl.trim() !== '';
+
+            // Se não tem m3u8, mostrar aviso
+            if (!hasManifestUrl) {
+                return `
+                    <div class="manifest-item" style="border-left: 4px solid #ff9800; background: #fff3e0;">
+                        <div class="manifest-domain">🌐 ${m.domain}</div>
+                        <div class="manifest-video-title" style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 13px;">
+                            🎬 ${videoTitle}
+                        </div>
+                        <div class="manifest-page-url" style="font-size: 11px; color: #059669; margin: 4px 0; word-break: break-all;">
+                            🔗 <a href="${m.pageUrl}" target="_blank" style="color: #059669; text-decoration: none;" title="Abrir página do vídeo">
+                                ${truncateUrl(m.pageUrl)}
+                            </a>
+                        </div>
+                        <div style="margin: 12px 0; padding: 10px; background: #fff; border-radius: 6px; border: 1px solid #ff9800;">
+                            <div style="font-size: 12px; color: #e65100; font-weight: 600; margin-bottom: 6px;">⚠️ Vídeo não capturado</div>
+                            <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                                O link do vídeo (m3u8) ainda não foi detectado. Isso pode acontecer se:
+                                <ul style="margin: 4px 0 4px 16px; padding: 0;">
+                                    <li>O vídeo não foi reproduzido ainda</li>
+                                    <li>A página carregou após a extensão</li>
+                                </ul>
+                            </div>
+                            <button class="btn btn-warning btn-sm reload-page-btn" 
+                                    data-index="${index}"
+                                    style="width: 100%; background: #ff9800; color: white; border: none;">
+                                🔄 Recarregar Página e Capturar
+                            </button>
+                        </div>
+                        ${materialsHtml}
+                        <div class="manifest-time" style="color: #666; font-size: 11px;">
+                            📅 ${formatTime(m.timestamp)} (${timeText})
+                        </div>
+                    </div>
+                `;
+            }
+
             return `
                 <div class="manifest-item" style="border-left: 4px solid ${isExpired ? '#f44336' : (minutesAgo > 1 ? '#ff9800' : '#4CAF50')}">
                     <div class="manifest-domain">🌐 ${m.domain}</div>
@@ -116,6 +155,27 @@ function loadManifests() {
                 } else {
                     console.error('processVideoWithUI não está definida');
                 }
+            });
+        });
+
+        // Event listeners para botões de recarregar página
+        document.querySelectorAll('.reload-page-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const originalText = this.innerHTML;
+                this.innerHTML = '⏳ Recarregando...';
+                this.disabled = true;
+
+                // Recarregar a aba ativa
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                    if (tabs[0]) {
+                        chrome.tabs.reload(tabs[0].id, {}, () => {
+                            // Aguardar 2 segundos e recarregar manifests
+                            setTimeout(() => {
+                                loadManifests();
+                            }, 2000);
+                        });
+                    }
+                });
             });
         });
     });
