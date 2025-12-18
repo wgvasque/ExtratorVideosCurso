@@ -7,7 +7,22 @@ console.log('[Video Extractor] Content script carregado');
 function extractVideoTitle() {
     // Tentar várias estratégias para encontrar o título
     const strategies = [
-        // 1. Hub.la - título abaixo do vídeo (PRIMEIRO para hub.la)
+        // 1. Kiwify - título da aula (h3) + curso (h2)
+        () => {
+            if (window.location.hostname.includes('kiwify.com')) {
+                const lessonTitle = document.querySelector('article#lesson__metadata h3')?.textContent?.trim();
+                const courseTitle = document.querySelector('article#lesson__metadata h2')?.textContent?.trim();
+
+                if (lessonTitle && courseTitle) {
+                    console.log('[Video Extractor] Kiwify:', courseTitle, '-', lessonTitle);
+                    return `${courseTitle} - ${lessonTitle}`;
+                } else if (lessonTitle) {
+                    return lessonTitle;
+                }
+            }
+            return null;
+        },
+        // 2. Hub.la - título abaixo do vídeo
         () => {
             if (window.location.hostname.includes('hub.la')) {
                 const h1 = document.querySelector('h1');
@@ -20,15 +35,15 @@ function extractVideoTitle() {
             }
             return null;
         },
-        // 2. Meta tag Open Graph
+        // 3. Meta tag Open Graph
         () => document.querySelector('meta[property="og:title"]')?.content,
-        // 3. Meta tag Twitter
+        // 4. Meta tag Twitter
         () => document.querySelector('meta[name="twitter:title"]')?.content,
-        // 4. Primeiro H1 da página
+        // 5. Primeiro H1 da página
         () => document.querySelector('h1')?.textContent?.trim(),
-        // 5. Título da página
+        // 6. Título da página
         () => document.title,
-        // 6. Seletores comuns de plataformas de curso
+        // 7. Seletores comuns de plataformas de curso
         () => document.querySelector('.video-title')?.textContent?.trim(),
         () => document.querySelector('.lesson-title')?.textContent?.trim(),
         () => document.querySelector('.course-title')?.textContent?.trim(),
@@ -54,6 +69,27 @@ function extractSupportMaterials() {
     const materials = [];
     const keywords = ['material', 'apoio', 'download', 'pdf', 'arquivo', 'recurso', 'anexo', 'documento'];
     const extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.zip', '.rar', '.ppt', '.pptx'];
+
+    // Kiwify - buscar na seção de descrição da aula
+    if (window.location.hostname.includes('kiwify.com')) {
+        const descriptionSection = document.querySelector('article#lesson__tab__content__description .lesson__description__container');
+        if (descriptionSection) {
+            const links = descriptionSection.querySelectorAll('a[href]');
+            links.forEach(link => {
+                const href = link.href;
+                const text = link.textContent?.trim() || '';
+
+                if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
+                    materials.push({
+                        url: href,
+                        text: text || 'Material de Apoio',
+                        type: 'Kiwify Material'
+                    });
+                    console.log('[Video Extractor] Kiwify material encontrado:', text, href);
+                }
+            });
+        }
+    }
 
     // Buscar todos os links da página
     const links = document.querySelectorAll('a[href]');
@@ -199,6 +235,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Para outras mensagens, NÃO retornar true se não for responder
     return false;
 });
+
+// Listen for messages from injected script (for Kiwify and other blob URL platforms)
+window.addEventListener('message', (event) => {
+    // Only accept messages from same origin
+    if (event.source !== window) return;
+
+    if (event.data.type === 'VIDEO_MANIFEST_DETECTED') {
+        console.log('[Video Extractor] Manifest detected from injected script:', event.data);
+
+        // Send to background script
+        chrome.runtime.sendMessage({
+            action: 'manifestDetected',
+            manifestUrl: event.data.manifestUrl,
+            pageUrl: event.data.pageUrl,
+            domain: event.data.domain,
+            platform: event.data.platform || 'unknown'
+        });
+    }
+});
+
+// Inject script for platforms that use blob URLs (Kiwify, etc)
+function injectScript() {
+    const script = document.createElement('script');
+    script.src = chrome.runtime.getURL('inject.js');
+    script.onload = function () {
+        this.remove();
+    };
+    (document.head || document.documentElement).appendChild(script);
+}
+
+// Inject on Kiwify and other blob URL platforms
+if (window.location.hostname.includes('kiwify.com')) {
+    console.log('[Video Extractor] Kiwify detected, injecting fetch interceptor');
+    injectScript();
+}
 
 // Extrair metadados automaticamente quando a página carregar
 const autoExtract = async () => {

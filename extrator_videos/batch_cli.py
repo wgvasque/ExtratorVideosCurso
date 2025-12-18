@@ -48,6 +48,17 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         "output": None
     }
     
+    # Métricas de tempo de processamento
+    import time
+    tempo_inicio_total = time.time()
+    tempos_por_etapa = {
+        "resolve": 0,
+        "ingest": 0,
+        "transcription": 0, 
+        "summarize": 0,
+        "output": 0
+    }
+    
     headers = {}
     # Smart Referer: Se não fornecido ou se o domínio mudar drasticamente, adaptar
     parsed_input = urlparse(u)
@@ -79,6 +90,10 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
     input_url = u
     manifest = None
     
+    # IMPORTANTE: Preservar URL original da página para extração de metadados
+    # Isso garante que título, domínio e materiais sejam extraídos da página correta
+    original_page_url = u
+    
     # Detectar se é URL de plataforma suportada pelo yt-dlp (YouTube, Vimeo, etc)
     # Se for, pular etapa de resolve (Playwright) e ir direto para yt-dlp na ingestão
     use_ytdlp_direct = is_supported_platform(u)
@@ -86,10 +101,13 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
     if use_ytdlp_direct:
         # Pular resolve para YouTube/Vimeo - yt-dlp será usado na ingestão
         print(f"[INFO] URL de plataforma suportada detectada ({u[:50]}...), pulando resolve/Playwright")
+        tempo_etapa_inicio = time.time()
         with logger.step("Resolver fonte de mídia", "resolve", level) as st:
             st.details_update({"method": "yt-dlp", "platform_detected": True, "skipped_playwright": True})
+        tempos_por_etapa["resolve"] = round(time.time() - tempo_etapa_inicio, 2)
     else:
         # Fluxo padrão: usar Playwright para resolver
+        tempo_etapa_inicio = time.time()
         with logger.step("Resolver fonte de mídia", "resolve", level) as st:
             try:
                 if not (input_url.lower().endswith(".m3u8") or input_url.lower().endswith(".mp4") or input_url.lower().endswith(".mpd")):
@@ -136,9 +154,12 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
                 errors_by_stage["resolve"] = str(e)
                 st.details_update({"error": str(e)})
                 print(f"[ERRO] Etapa resolve: {e}")
+        tempos_por_etapa["resolve"] = round(time.time() - tempo_etapa_inicio, 2)
     
+    print(f"[TEMPO] Etapa resolve: {tempos_por_etapa['resolve']}s")
     wav = None
     ytdlp_metadata = {}  # Metadados do vídeo (se baixado via yt-dlp)
+    tempo_etapa_inicio = time.time()
     with logger.step("Ingestão de áudio (ffmpeg/yt-dlp)", "ingest", level) as st:
         preview = int(os.getenv("FFMPEG_PREVIEW_SECONDS") or "0")
         ingest_error = None
@@ -193,8 +214,12 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         if ingest_error:
             errors_by_stage["ingest"] = ingest_error
             print(f"[ERRO] Etapa ingest: {ingest_error}")
+    tempos_por_etapa["ingest"] = round(time.time() - tempo_etapa_inicio, 2)
+    print(f"[TEMPO] Etapa ingest: {tempos_por_etapa['ingest']}s")
+    
     ckdir = os.getenv("SUMARIOS_CACHE_DIR") or "sumarios_cache"
     ttl = int(os.getenv("CACHE_TTL_HOURS") or "72")
+    tempo_etapa_inicio = time.time()
     with logger.step("Cache de transcrição", "cache", level) as st:
         key = cache_key(u, input_url, headers)
         cached_tr = load_transcription(ckdir, key, ttl_hours=ttl)
@@ -244,6 +269,10 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
             tr = {"language": "pt", "duration": None, "segments": []}
     with logger.step("Pós-processamento e segmentação", "postprocess", level):
         tp = segments_to_topics(tr["segments"]) if isinstance(tr, dict) else segments_to_topics(tr)
+    
+    tempos_por_etapa["transcription"] = round(time.time() - tempo_etapa_inicio, 2)
+    print(f"[TEMPO] Etapa transcription: {tempos_por_etapa['transcription']}s")
+    
     # Determinar qual serviço usar para resumo
     use_openrouter = os.getenv("USE_OPENROUTER", "false").lower() == "true" and os.getenv("OPENROUTER_API_KEY")
     use_fallback = os.getenv("OPENROUTER_USE_FALLBACK", "true").lower() == "true"
@@ -251,6 +280,7 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
     # Inicializar sj para evitar UnboundLocalError
     sj = json.dumps({"resumo_conciso": "", "pontos_chave": [], "topicos": [], "orientacoes": [], "secoes": []}, ensure_ascii=False)
     
+    tempo_etapa_inicio = time.time()
     with logger.step(f"Resumo (Gemini → OpenRouter)", "summarize", level) as st:
         use_blocks = (os.getenv("OPENROUTER_USE_BLOCKS") or "").lower() in ("1", "true", "yes")
         max_attempts = int(os.getenv("OPENROUTER_MAX_FALLBACK_ATTEMPTS") or "10")
@@ -349,6 +379,11 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         # Usar diretamente os dados já parseados
         data_obj = res.get("data") or {}
         sj = json.dumps(data_obj, ensure_ascii=False)
+    
+    tempos_por_etapa["summarize"] = round(time.time() - tempo_etapa_inicio, 2)
+    print(f"[TEMPO] Etapa summarize: {tempos_por_etapa['summarize']}s")
+    
+    tempo_etapa_inicio = time.time()
     # preparar diretórios por dominio/id
     sum_dir = os.getenv("SUMARIOS_DIR") or "sumarios"
     dom = "misc"
@@ -408,11 +443,42 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         print(f"[DEBUG] JSON parseado com sucesso. Campos: {list(data.keys())}")
         
         # Adicionar metadados essenciais ao JSON
-        data["url_video"] = u
+        data["url_video"] = original_page_url  # Usar URL original da página
         data["titulo_video"] = title
         data["dominio"] = dom
         data["video_id"] = cid
         data["data_processamento"] = datetime.datetime.now().isoformat()
+        
+        # Adicionar URL do manifest e URL da página (se disponíveis)
+        if manifest:
+            data["manifestUrl"] = manifest
+        data["pageUrl"] = original_page_url  # Usar URL original da página, não o manifest
+        
+        # Adicionar materiais de apoio da extensão (se disponíveis)
+        try:
+            from pathlib import Path
+            manifests_file = Path(__file__).parent.parent / 'captured_manifests.json'
+            if manifests_file.exists():
+                with open(manifests_file, 'r', encoding='utf-8') as f:
+                    manifests_data = json.load(f)
+                    # Usar original_page_url para buscar os metadados corretos
+                    manifest_record = manifests_data.get(original_page_url, {})
+                    if isinstance(manifest_record, dict):
+                        # Adicionar materiais de apoio se existirem
+                        support_materials = manifest_record.get('supportMaterials', [])
+                        if support_materials:
+                            data["materiais_apoio"] = support_materials
+                            print(f"[INFO] {len(support_materials)} materiais de apoio adicionados ao JSON")
+                        
+                        # Adicionar título do vídeo da extensão se disponível e melhor que o atual
+                        ext_title = manifest_record.get('videoTitle') or manifest_record.get('pageTitle')
+                        if ext_title and ext_title != 'Título não encontrado' and len(ext_title) > len(title):
+                            data["titulo_video"] = ext_title
+                            title = ext_title  # Atualizar variável local também
+                            print(f"[INFO] Título atualizado da extensão: {ext_title}")
+        except Exception as e:
+            print(f"[AVISO] Não foi possível carregar materiais de apoio: {e}")
+        
         print(f"[DEBUG] Metadados adicionados")
         
         # SEMPRE adicionar transcrição completa (independente do sucesso da LLM)
@@ -422,12 +488,11 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         data["transcricao_chars"] = len(transcricao_texto)
         print(f"[DEBUG] Transcrição adicionada ({len(transcricao_texto)} chars)")
         
-        # Adicionar informações do modelo IA
-        data["retorno_literal_gemini"] = (res["raw"] if isinstance(res, dict) and res.get("raw") is not None else "") or ""
-        data["origin"] = (res["origin"] if isinstance(res, dict) and res.get("origin") is not None else data.get("origin") or "") or ""
-        data["gemini_model"] = (res["model"] if isinstance(res, dict) and res.get("model") is not None else data.get("gemini_model") or "") or ""
-        data["gemini_error"] = (res["error"] if isinstance(res, dict) and res.get("error") is not None else data.get("gemini_error") or "") or ""
-        print(f"[DEBUG] Informações da IA adicionadas. Modelo: {data.get('gemini_model')}")
+        # Adicionar informações do modelo IA (genérico para Gemini, OpenRouter, etc)
+        data["ia_origem"] = (res["origin"] if isinstance(res, dict) and res.get("origin") is not None else data.get("ia_origem") or "") or ""
+        data["ia_modelo"] = (res["model"] if isinstance(res, dict) and res.get("model") is not None else data.get("ia_modelo") or "") or ""
+        data["ia_erro"] = (res["error"] if isinstance(res, dict) and res.get("error") is not None else data.get("ia_erro") or "") or ""
+        print(f"[DEBUG] Informações da IA adicionadas. Origem: {data.get('ia_origem')}, Modelo: {data.get('ia_modelo')}")
         
         # NOVO: Adicionar erros de cada etapa ao JSON
         # Filtrar apenas erros que realmente ocorreram (não None)
@@ -448,6 +513,16 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         if openrouter_error_detail:
             data["openrouter_error_detail"] = openrouter_error_detail
             print(f"[INFO] Erro do OpenRouter gravado: {openrouter_error_detail['error'][:100]}")
+        
+        # Adicionar métricas de tempo de processamento
+        tempo_fim_total = time.time()
+        tempo_total_segundos = tempo_fim_total - tempo_inicio_total
+        data["tempo_processamento"] = {
+            "total_segundos": round(tempo_total_segundos, 2),
+            "total_formatado": f"{int(tempo_total_segundos // 60)}min {int(tempo_total_segundos % 60)}s",
+            "etapas": tempos_por_etapa
+        }
+        print(f"[INFO] Tempo total de processamento: {data['tempo_processamento']['total_formatado']}")
         
         # Salvar arquivo de debug PRIMEIRO (antes do JSON principal)
         # Isso garante que temos os dados de debug mesmo se o salvamento principal falhar
@@ -475,6 +550,37 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         except Exception as debug_err:
             print(f"[AVISO] Erro ao salvar debug JSON: {debug_err}")
         
+        # Limpar campos obsoletos e debug extensos do JSON final
+        # Estes campos são mantidos apenas no arquivo de debug separado
+        campos_obsoletos = [
+            'retorno_literal_gemini',  # Debug interno, muito extenso
+            'gemini_error_detail',     # Debug interno, mantido no arquivo de debug
+            'openrouter_error_detail', # Debug interno, mantido no arquivo de debug
+            'resumo_conciso',          # Duplicado de resumo_executivo (vem do prompt antigo)
+            # Campos antigos renomeados para nomes genéricos
+            'gemini_model',            # Renomeado para ia_modelo
+            'gemini_error',            # Renomeado para ia_erro
+            'origin',                  # Renomeado para ia_origem
+        ]
+        for campo in campos_obsoletos:
+            if campo in data:
+                del data[campo]
+        
+        # Remover arrays vazios que não agregam valor
+        arrays_para_limpar = ['pontos_chave', 'topicos', 'secoes']
+        for arr in arrays_para_limpar:
+            if arr in data and (data[arr] is None or len(data[arr]) == 0):
+                del data[arr]
+        
+        # Limpar sub-arrays vazios em pontos_memorizacao
+        if 'pontos_memorizacao' in data and isinstance(data['pontos_memorizacao'], dict):
+            pm = data['pontos_memorizacao']
+            for key in list(pm.keys()):
+                if pm[key] is None or (isinstance(pm[key], list) and len(pm[key]) == 0):
+                    del pm[key]
+        
+        print(f"[DEBUG] JSON limpo. Campos restantes: {len(data.keys())}")
+        
         # Salvar JSON completo
         print(f"[DEBUG] Tentando salvar JSON em: {jpath}")
         with open(jpath, "w", encoding="utf-8") as f:
@@ -483,30 +589,56 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         print(f"[OK] JSON completo salvo: {jpath}")
         
         # Salvar Markdown (opcional, para visualização rápida)
-        md = ["# Resumo\n", data.get("resumo_conciso") or ""]
-        if data.get("pontos_chave"):
-            md.append("\n## Pontos-chave\n")
-            for idx, p in enumerate(data["pontos_chave"], start=1):
-                md.append(f"{idx}. {p}\n")
-        if data.get("topicos"):
-            md.append("\n## Tópicos\n")
-            for t in data["topicos"]:
-                md.append(f"- {t}\n")
-        if data.get("secoes"):
-            md.append("\n## Seções\n")
-            for s in data["secoes"]:
-                md.append(f"- {s.get('titulo')} ({s.get('inicio')}–{s.get('fim')})\n")
+        md = [f"# {data.get('titulo_video', 'Resumo')}\n\n"]
+        md.append(f"**URL:** {data.get('url_video', '')}\n\n")
+        md.append(f"**Data:** {data.get('data_processamento', '')}\n\n")
+        
+        # Resumo Executivo
+        if data.get("resumo_executivo"):
+            md.append("## 📋 Resumo Executivo\n\n")
+            md.append(f"{data['resumo_executivo']}\n\n")
+        
+        # Objetivos de Aprendizagem
+        if data.get("objetivos_aprendizagem"):
+            md.append("## 🎯 Objetivos de Aprendizagem\n\n")
+            for idx, obj in enumerate(data["objetivos_aprendizagem"], start=1):
+                md.append(f"{idx}. {obj}\n")
+            md.append("\n")
+        
+        # Ideias Chave
+        if data.get("ideias_chave"):
+            md.append("## 💡 Ideias Chave\n\n")
+            for idea in data["ideias_chave"]:
+                md.append(f"- {idea}\n")
+            md.append("\n")
+        
+        # Materiais de Apoio
+        if data.get("materiais_apoio"):
+            md.append("## 📎 Materiais de Apoio\n\n")
+            for mat in data["materiais_apoio"]:
+                url = mat.get('url', '')
+                text = mat.get('text', mat.get('type', 'Material'))
+                if url:
+                    md.append(f"- [{text}]({url})\n")
+                else:
+                    md.append(f"- {text}\n")
+            md.append("\n")
         
         # Adicionar seção de erros ao Markdown se houver
         if erros_ocorridos:
-            md.append("\n## ⚠️ Erros no Processamento\n")
+            md.append("## ⚠️ Erros no Processamento\n\n")
             for etapa, erro in erros_ocorridos.items():
                 md.append(f"- **{etapa}**: {erro}\n")
+            md.append("\n")
         
         with open(mpath, "w", encoding="utf-8") as f:
             f.writelines(md)
         
         print(f"[OK] Markdown salvo: {mpath}")
+        
+        # Registrar tempo de output
+        tempos_por_etapa["output"] = round(time.time() - tempo_etapa_inicio, 2)
+        print(f"[TEMPO] Etapa output: {tempos_por_etapa['output']}s")
         
         # REMOVIDO: Geração de HTML (agora feita dinamicamente pela interface web)
         # A interface web renderiza os relatórios em tempo real a partir do JSON

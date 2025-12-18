@@ -66,6 +66,41 @@
       border: 2px solid var(--ink);
     }
 
+    /* Window Control Buttons */
+    .window-control-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      padding: 0;
+    }
+
+    .window-control-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.5);
+      transform: scale(1.05);
+    }
+
+    .window-control-btn:active {
+      transform: scale(0.95);
+    }
+
+    .window-control-btn.close-btn:hover {
+      background: #ff6b6b;
+      border-color: #ff8a80;
+    }
+
+    .window-control-btn svg {
+      pointer-events: none;
+    }
+
     /* Tabs */
     .tabs {
       display: flex;
@@ -656,16 +691,58 @@
   <!-- Header -->
   <div class="header">
     <h1>🎥 Video Processor</h1>
-    <span class="version">EXT v2</span>
+    <div style="display: flex; gap: 4px; align-items: center;">
+      <span class="version">EXT v2</span>
+      <button id="btn-minimize" class="window-control-btn" title="Minimizar">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="6" width="10" height="2" rx="1" fill="currentColor" />
+        </svg>
+      </button>
+      <button id="btn-close" class="window-control-btn close-btn" title="Fechar">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- Tabs -->
-  <div class="tabs">
+  <div class="tabs" style="display: none;">
     <button class="tab active" data-tab="capture">📡 Captura</button>
     <button class="tab" data-tab="library">📚 Biblioteca</button>
   </div>
 
-  <div class="content">
+  <!-- API Connection Error (hidden by default) -->
+  <div id="api-error-container" style="display: none; padding: 20px; text-align: center;">
+    <div
+      style="background: linear-gradient(135deg, #ff6b6b, #ff8a80); border: 3px solid var(--ink); border-radius: 12px; padding: 20px; box-shadow: 4px 4px 0px 0px var(--ink);">
+      <div style="font-size: 48px; margin-bottom: 12px;">⚠️</div>
+      <h2
+        style="font-family: 'Space Grotesk', sans-serif; color: white; margin-bottom: 12px; text-shadow: 2px 2px 0 var(--ink);">
+        API Local Indisponível</h2>
+      <p style="color: white; font-size: 13px; line-height: 1.6; margin-bottom: 16px;">
+        Não foi possível conectar ao servidor local.<br>
+        Certifique-se de que a API está rodando.
+      </p>
+      <div
+        style="background: white; border: 2px solid var(--ink); border-radius: 8px; padding: 12px; margin-top: 16px; text-align: left;">
+        <div
+          style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 11px; margin-bottom: 8px; color: var(--ink);">
+          📋 Para iniciar a API:</div>
+        <code
+          style="display: block; background: var(--base); padding: 8px; border-radius: 4px; font-size: 10px; font-family: monospace; color: var(--ink); border: 1px solid var(--ink);">
+          cd web_interface<br>
+          python app.py
+        </code>
+      </div>
+      <button id="retry-connection-btn" class="btn btn-sun"
+        style="margin-top: 16px; width: 100%; justify-content: center;">
+        🔄 Tentar Novamente
+      </button>
+    </div>
+  </div>
+
+  <div class="content" id="main-content" style="display: none;">
     <!-- CAPTURE TAB -->
     <div id="tab-capture" class="tab-panel active">
 

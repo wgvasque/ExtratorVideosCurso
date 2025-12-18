@@ -228,10 +228,14 @@ def start_processing():
     os.environ['PROMPT_MODEL'] = prompt_model
     print(f"🎯 [API] Modelo de prompt selecionado: {prompt_model}")
     
-    # Se recebeu manifestUrl JWT, salvar no captured_manifests.json
+    # Se recebeu manifestUrl JWT, salvar no captured_manifests.json com metadados
     if manifest_url and manifest_url.startswith('http'):
         project_root = Path(__file__).parent.parent
         manifests_file = project_root / 'captured_manifests.json'
+        
+        # Extrair metadados enviados pelo popup
+        video_title = data.get('videoTitle') or data.get('pageTitle') or ''
+        support_materials = data.get('supportMaterials') or []
         
         try:
             import json
@@ -240,7 +244,7 @@ def start_processing():
                 with open(manifests_file, 'r', encoding='utf-8') as f:
                     manifests = json.load(f)
             
-            # Atualizar com o manifest JWT
+            # Atualizar com o manifest JWT e metadados
             page_url = valid_urls[0]
             from urllib.parse import urlparse
             parsed = urlparse(page_url)
@@ -250,7 +254,9 @@ def start_processing():
                 'manifestUrl': manifest_url,
                 'domain': domain,
                 'timestamp': datetime.now().isoformat() + 'Z',
-                'captured_at': datetime.now().isoformat()
+                'captured_at': datetime.now().isoformat(),
+                'videoTitle': video_title,
+                'supportMaterials': support_materials
             }
             
             with open(manifests_file, 'w', encoding='utf-8') as f:
@@ -258,6 +264,8 @@ def start_processing():
             
             print(f"🎯 [API] Manifest JWT salvo para: {domain}")
             print(f"   URL: {manifest_url[:80]}...")
+            print(f"   Título: {video_title[:50] if video_title else '(não informado)'}...")
+            print(f"   Materiais: {len(support_materials)} itens")
         except Exception as e:
             print(f"❌ [API] Erro ao salvar manifest JWT: {e}")
     
@@ -412,7 +420,7 @@ def list_reports():
             
             # Extrair informações
             title = data.get('titulo_video') or data.get('titulo') or f'Video {video_id}'
-            model = data.get('gemini_model', 'N/A')
+            model = data.get('ia_modelo') or data.get('gemini_model') or 'N/A'
             origin = data.get('origin', 'N/A')
             
             # Data de processamento
@@ -571,7 +579,7 @@ def get_report_data(domain, video_id):
             transcricao = report_data.get('transcricao_completa') or ''
         
         # Fallback: scraping de HTML v1 se dados faltarem
-        if not transcricao or not report_data.get('gemini_model'):
+        if not transcricao or not (report_data.get('ia_modelo') or report_data.get('gemini_model')):
             try:
                 render_dir = video_dir / 'render'
                 if render_dir.exists():
@@ -586,10 +594,10 @@ def get_report_data(domain, video_id):
                         import re
                         
                         # Scrape Model se faltando
-                        if not report_data.get('gemini_model'):
+                        if not (report_data.get('ia_modelo') or report_data.get('gemini_model')):
                             m = re.search(r'<strong>Modelo:</strong>\s*(.*?)</div>', content, re.IGNORECASE)
                             if m:
-                                report_data['gemini_model'] = m.group(1).strip()
+                                report_data['ia_modelo'] = m.group(1).strip()
                         
                         # Scrape Transcrição se faltando
                         if not transcricao and "Transcrição" in content:
@@ -623,8 +631,10 @@ def get_report_data(domain, video_id):
                 'videoId': video_id,
                 'id': video_id,
                 'date': date_str or datetime.now().strftime("%d/%m/%Y %H:%M"),
-                'model': report_data.get('gemini_model') or 'N/A',
-                'origin': report_data.get('origin') or '',
+                # Novos nomes de campos com fallback para antigos
+                'model': report_data.get('ia_modelo') or report_data.get('gemini_model') or 'N/A',
+                'origin': report_data.get('ia_origem') or report_data.get('origin') or '',
+                'error': report_data.get('ia_erro') or report_data.get('gemini_error') or '',
                 # NOVO: Informações de processamento
                 'processamento_completo': report_data.get('processamento_completo', True),
                 'transcricao_sucesso': report_data.get('transcricao_sucesso', bool(transcricao)),
@@ -655,7 +665,10 @@ def get_report_data(domain, video_id):
                 'materiais_apoio': report_data.get('materiais_apoio') or [],
                 # Modelo de prompt usado
                 'prompt_model_usado': report_data.get('prompt_model_usado') or report_data.get('_modelo') or '',
-                '_modelo': report_data.get('_modelo') or report_data.get('prompt_model_usado') or ''
+                '_modelo': report_data.get('_modelo') or report_data.get('prompt_model_usado') or '',
+                # URLs adicionais
+                'manifestUrl': report_data.get('manifestUrl') or report_data.get('manifest_url') or '',
+                'pageUrl': report_data.get('pageUrl') or report_data.get('url_video') or report_data.get('url') or ''
             },
             'transcription': transcricao,
             # NOVO: Erros por etapa
@@ -806,11 +819,12 @@ def process_videos_batch(urls):
             print(f"🔍 [DEBUG] Processando vídeo {i}/{len(urls)}: {url}")
             print(f"🔍 [DEBUG] Referer: {referer}")
             
-            # Criar arquivo temporário com URL para batch_cli (preferir manifest capturado)
+            # Criar arquivo temporário com URL para batch_cli
+            # IMPORTANTE: SEMPRE enviar a URL da PÁGINA, não o manifest
+            # O batch_cli.py vai buscar o manifest do captured_manifests.json usando a página URL
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
-                input_for_cli = hint_manifest if (hint_manifest and hint_manifest.startswith('http')) else url
-                f.write(input_for_cli + '\n')
+                f.write(url + '\n')  # SEMPRE usar URL da página
                 temp_file = f.name
             
             # Atualizar step: Iniciando processamento
@@ -863,12 +877,18 @@ def process_videos_batch(urls):
                     
                     # Detectar fase baseado no output
                     lower_output = partial_output.lower()
-                    if 'whisper' in lower_output or 'transcrição' in lower_output or 'transcri' in lower_output:
+                    
+                    # Prioridade para marcadores [TEMPO] mais recentes
+                    if '[tempo] etapa summarize:' in lower_output or '[tempo] etapa output:' in lower_output:
+                        processing_state['current_step'] = f"📝 Salvando relatório {i}/{len(urls)}..."
+                    elif '[tempo] etapa transcription:' in lower_output or ('gemini' in lower_output or 'openrouter' in lower_output):
+                        processing_state['current_step'] = f"🤖 Gerando resumo com IA {i}/{len(urls)}..."
+                    elif '[tempo] etapa ingest:' in lower_output or 'transcrição' in lower_output or 'transcri' in lower_output or 'whisper' in lower_output:
                         processing_state['current_step'] = f"🎤 Transcrevendo áudio {i}/{len(urls)}..."
-                    elif 'gemini' in lower_output or 'openrouter' in lower_output or 'resumo' in lower_output:
-                        processing_state['current_step'] = f"🤖 Gerando resumo {i}/{len(urls)}..."
-                    elif 'ffmpeg' in lower_output or 'download' in lower_output:
+                    elif '[tempo] etapa resolve:' in lower_output or 'ffmpeg' in lower_output or 'download' in lower_output or 'yt-dlp' in lower_output:
                         processing_state['current_step'] = f"📥 Baixando áudio {i}/{len(urls)}..."
+                    elif 'extension' in lower_output or 'manifest' in lower_output:
+                        processing_state['current_step'] = f"🔍 Resolvendo fonte {i}/{len(urls)}..."
                     elif 'relatório' in lower_output or 'html' in lower_output:
                         processing_state['current_step'] = f"📝 Gerando relatório {i}/{len(urls)}..."
                 except:
@@ -1016,6 +1036,8 @@ def capture_manifest():
                 manifest_url = f"{pu.scheme}://{pu.netloc}/{token}/manifest/video.m3u8"
         domain = data.get('domain')
         timestamp = data.get('timestamp')
+        video_title = data.get('videoTitle') or data.get('pageTitle') or ''
+        support_materials = data.get('supportMaterials') or []
         
         if not page_url or not manifest_url:
             return jsonify({'error': 'Dados incompletos'}), 400
@@ -1032,12 +1054,14 @@ def capture_manifest():
             except:
                 manifests = {}
         
-        # Adicionar novo manifest
+        # Adicionar novo manifest com TODOS os metadados
         manifests[page_url] = {
             'manifestUrl': manifest_url,
             'domain': domain,
             'timestamp': timestamp,
-            'captured_at': datetime.now().isoformat()
+            'captured_at': datetime.now().isoformat(),
+            'videoTitle': video_title,
+            'supportMaterials': support_materials
         }
         
         # Salvar

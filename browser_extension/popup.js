@@ -150,16 +150,24 @@ function loadManifests() {
             document.querySelectorAll('.test-btn').forEach(btn => {
                 btn.addEventListener('click', function () {
                     const url = this.getAttribute('data-url');
-                    navigator.clipboard.writeText(url).then(() => {
-                        const originalText = this.innerHTML;
-                        this.innerHTML = '✅ Copiado!';
-                        setTimeout(() => {
-                            this.innerHTML = originalText;
-                        }, 2000);
-                    }).catch(err => {
-                        console.error('Erro ao copiar:', err);
-                        this.innerHTML = '❌ Erro';
-                    });
+
+                    // Try modern clipboard API first
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(url).then(() => {
+                            const originalText = this.innerHTML;
+                            this.innerHTML = '✅ Copiado!';
+                            setTimeout(() => {
+                                this.innerHTML = originalText;
+                            }, 2000);
+                        }).catch(err => {
+                            console.warn('Clipboard API failed, trying fallback:', err);
+                            // Fallback to execCommand
+                            copyToClipboardFallback(url, this);
+                        });
+                    } else {
+                        // Use fallback directly
+                        copyToClipboardFallback(url, this);
+                    }
                 });
             });
 
@@ -207,6 +215,39 @@ function loadManifests() {
     });
 }
 
+// Fallback function for copying to clipboard using execCommand
+function copyToClipboardFallback(text, button) {
+    try {
+        // Create temporary textarea
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+
+        // Select and copy
+        textarea.select();
+        textarea.setSelectionRange(0, 99999); // For mobile
+
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        if (successful) {
+            const originalText = button.innerHTML;
+            button.innerHTML = '✅ Copiado!';
+            setTimeout(() => {
+                button.innerHTML = originalText;
+            }, 2000);
+        } else {
+            button.innerHTML = '❌ Erro';
+            console.error('execCommand copy failed');
+        }
+    } catch (err) {
+        button.innerHTML = '❌ Erro';
+        console.error('Fallback copy error:', err);
+    }
+}
+
 // Função para atualizar metadados
 function refreshMetadata(button) {
     const originalText = button.innerHTML;
@@ -244,63 +285,52 @@ function formatTime(timestamp) {
 }
 
 // Carregar prompts disponíveis da API
+// Carregar prompts disponíveis da API via Background (evita Mixed Content)
 async function loadPrompts() {
-    const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
     const selector = document.getElementById('promptModelSelect');
-    const promptInfo = document.getElementById('promptInfo');
 
-    try {
-        let prompts = null;
-        for (const host of hosts) {
-            try {
-                const response = await fetch(`${host}/prompts`, { cache: 'no-store' });
-                if (response.ok) {
-                    const data = await response.json();
-                    prompts = data.prompts;
-                    break;
+    // Carregar seleção salva
+    const saved = await chrome.storage.local.get(['selectedPrompt']);
+    const savedPrompt = saved.selectedPrompt;
+
+    chrome.runtime.sendMessage({ action: 'getPrompts' }, (response) => {
+        if (response && response.success && response.prompts) {
+            const prompts = response.prompts;
+
+            if (prompts.length === 0) {
+                selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
+                return;
+            }
+
+            // Popular dropdown
+            selector.innerHTML = '';
+            prompts.forEach(prompt => {
+                const option = document.createElement('option');
+                option.value = prompt.name;
+                const icon = prompt.valid ? '✅' : '❌';
+                option.textContent = `${icon} ${prompt.name}`;
+                option.disabled = !prompt.valid;
+                if (savedPrompt === prompt.name || (!savedPrompt && prompt.valid)) {
+                    option.selected = true;
                 }
-            } catch (e) {
-                continue;
-            }
+                selector.appendChild(option);
+            });
+
+            // Atualizar listeners
+            selector.onchange = async () => {
+                const selected = selector.value;
+                await chrome.storage.local.set({ selectedPrompt: selected });
+                updatePromptInfo(selected);
+            };
+
+            // Mostrar info inicial
+            updatePromptInfo(selector.value);
+
+        } else {
+            console.error('Erro ao carregar prompts:', response?.error);
+            selector.innerHTML = '<option value="">❌ Erro de conexão</option>';
         }
-
-        if (!prompts || prompts.length === 0) {
-            selector.innerHTML = '<option value="">❌ Erro ao carregar prompts</option>';
-            return;
-        }
-
-        // Carregar seleção salva
-        const saved = await chrome.storage.local.get(['selectedPrompt']);
-        const savedPrompt = saved.selectedPrompt;
-
-        // Popular dropdown
-        selector.innerHTML = '';
-        prompts.forEach(prompt => {
-            const option = document.createElement('option');
-            option.value = prompt.name;
-            const icon = prompt.valid ? '✅' : '❌';
-            option.textContent = `${icon} ${prompt.name}`;
-            option.disabled = !prompt.valid;
-            if (savedPrompt === prompt.name || (!savedPrompt && prompt.valid)) {
-                option.selected = true;
-            }
-            selector.appendChild(option);
-        });
-
-        // Atualizar info do prompt selecionado
-        selector.addEventListener('change', async () => {
-            const selected = selector.value;
-            await chrome.storage.local.set({ selectedPrompt: selected });
-            updatePromptInfo(selected);
-        });
-
-        // Mostrar info inicial
-        updatePromptInfo(selector.value);
-
-    } catch (error) {
-        console.error('Erro ao carregar prompts:', error);
-        selector.innerHTML = '<option value="">❌ Erro de conexão</option>';
-    }
+    });
 }
 
 // Atualizar informações do prompt selecionado
@@ -312,35 +342,171 @@ async function updatePromptInfo(promptName) {
         return;
     }
 
-    const hosts = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+    chrome.runtime.sendMessage({ action: 'getPromptDetails', promptName: promptName }, (response) => {
+        if (response && response.success && response.details) {
+            const details = response.details;
+            promptInfo.style.display = 'block';
+            promptInfo.innerHTML = `
+                <strong>${details.validation.valid ? '✅' : '❌'} ${details.name}</strong><br>
+                ${details.metadata.description || 'Sem descrição'}
+                ${details.validation.valid ? '' : '<br><span style="color: #f44336;">⚠️ Prompt inválido</span>'}
+            `;
+        } else {
+            console.error('Erro ao carregar info do prompt:', response?.error);
+            promptInfo.style.display = 'none';
+        }
+    });
+}
 
-    try {
-        for (const host of hosts) {
-            try {
-                const response = await fetch(`${host}/prompts/${encodeURIComponent(promptName)}`, { cache: 'no-store' });
-                if (response.ok) {
-                    const details = await response.json();
-                    promptInfo.style.display = 'block';
-                    promptInfo.innerHTML = `
-                        <strong>${details.validation.valid ? '✅' : '❌'} ${details.name}</strong><br>
-                        ${details.metadata.description || 'Sem descrição'}
-                        ${details.validation.valid ? '' : '<br><span style="color: #f44336;">⚠️ Prompt inválido</span>'}
-                    `;
+// Track API status and monitoring interval
+let currentApiStatus = null;
+let apiMonitorInterval = null;
+
+// Check API connection and show/hide UI accordingly
+async function checkApiConnection() {
+    const apiErrorContainer = document.getElementById('api-error-container');
+    const mainContent = document.getElementById('main-content');
+    const tabs = document.querySelector('.tabs');
+
+    // Try to reach the API health endpoint
+    return new Promise((resolve) => {
+        try {
+            chrome.runtime.sendMessage({ action: 'checkApiHealth' }, (response) => {
+                // Check if extension context is still valid
+                if (chrome.runtime.lastError) {
+                    console.warn('[Video Processor] Extension context lost, stopping monitoring');
+                    stopApiMonitoring();
+                    resolve(false);
                     return;
                 }
-            } catch (e) {
-                continue;
-            }
+
+                const isConnected = response && response.success;
+
+                // Only update UI if status changed
+                if (currentApiStatus !== isConnected) {
+                    currentApiStatus = isConnected;
+
+                    if (isConnected) {
+                        // API is reachable
+                        apiErrorContainer.style.display = 'none';
+                        mainContent.style.display = 'block';
+                        tabs.style.display = 'flex';
+
+                        // Reload content when API comes back online
+                        if (typeof loadPrompts === 'function') loadPrompts();
+                        if (typeof loadManifests === 'function') loadManifests();
+                    } else {
+                        // API is unreachable
+                        apiErrorContainer.style.display = 'block';
+                        mainContent.style.display = 'none';
+                        tabs.style.display = 'none';
+                    }
+                }
+
+                resolve(isConnected);
+            });
+        } catch (error) {
+            console.warn('[Video Processor] Error checking API:', error);
+            stopApiMonitoring();
+            resolve(false);
         }
-        promptInfo.style.display = 'none';
-    } catch (error) {
-        console.error('Erro ao carregar info do prompt:', error);
-        promptInfo.style.display = 'none';
+    });
+}
+
+// Start periodic API monitoring
+function startApiMonitoring() {
+    // Clear any existing interval
+    if (apiMonitorInterval) {
+        clearInterval(apiMonitorInterval);
+    }
+
+    // Check every 5 seconds
+    apiMonitorInterval = setInterval(async () => {
+        await checkApiConnection();
+    }, 5000);
+}
+
+// Stop API monitoring
+function stopApiMonitoring() {
+    if (apiMonitorInterval) {
+        clearInterval(apiMonitorInterval);
+        apiMonitorInterval = null;
     }
 }
 
 // Event listeners
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Window Controls (Overlay Mode) - Setup FIRST, before API check
+    const btnMinimize = document.getElementById('btn-minimize');
+    const btnClose = document.getElementById('btn-close');
+    const header = document.querySelector('.header');
+
+    if (btnMinimize) {
+        btnMinimize.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.parent.postMessage({ action: 'MINIMIZE' }, '*');
+        });
+    }
+
+    if (btnClose) {
+        btnClose.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.parent.postMessage({ action: 'CLOSE' }, '*');
+        });
+    }
+
+    if (header) {
+        header.style.cursor = 'move';
+        header.addEventListener('mousedown', (e) => {
+            // Prevent drag if clicking buttons
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+
+            e.preventDefault(); // Prevent text selection
+            window.parent.postMessage({
+                action: 'DRAG_START',
+                screenX: e.screenX,
+                screenY: e.screenY
+            }, '*');
+        });
+    }
+
+    // Check API connection
+    const apiAvailable = await checkApiConnection();
+
+    // Start periodic monitoring
+    startApiMonitoring();
+
+    // Setup retry button
+    const retryBtn = document.getElementById('retry-connection-btn');
+    if (retryBtn) {
+        retryBtn.addEventListener('click', async () => {
+            retryBtn.innerHTML = '⏳ Verificando...';
+            retryBtn.disabled = true;
+
+            const connected = await checkApiConnection();
+
+            if (connected) {
+                // Connection restored - monitoring will handle UI updates
+                retryBtn.innerHTML = '✅ Conectado!';
+                setTimeout(() => {
+                    retryBtn.innerHTML = '🔄 Tentar Novamente';
+                    retryBtn.disabled = false;
+                }, 1500);
+            } else {
+                retryBtn.innerHTML = '❌ Ainda indisponível';
+                setTimeout(() => {
+                    retryBtn.innerHTML = '🔄 Tentar Novamente';
+                    retryBtn.disabled = false;
+                }, 2000);
+            }
+        });
+    }
+
+    // Only load content if API is available
+    if (!apiAvailable) {
+        return;
+    }
+
     // Carregar prompts disponíveis
     loadPrompts();
 

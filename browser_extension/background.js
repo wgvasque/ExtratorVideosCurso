@@ -286,8 +286,8 @@ function captureManifest(manifestUrl, tabId, source = 'unknown') {
       const pageUrl = tab.url;
 
       // Ignorar se a página atual já é um manifest (evita duplicatas ao testar)
-      if (pageUrl.includes('.m3u8') || pageUrl.includes('.mpd') ||
-        pageUrl.includes('cloudflarestream.com/manifest')) {
+      if (pageUrl && (pageUrl.includes('.m3u8') || pageUrl.includes('.mpd') ||
+        pageUrl.includes('cloudflarestream.com/manifest'))) {
         console.log('[Video Extractor] Ignorando captura - página atual é um manifest');
         return;
       }
@@ -475,6 +475,26 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   } else if (request.action === 'stopPolling') {
     stopPolling();
     sendResponse({ success: true });
+  } else if (request.action === 'manifestDetected') {
+    // Manifest detected from injected script (Kiwify, etc)
+    console.log('[Video Extractor] Manifest detected from injected script:', request);
+
+    const capture = {
+      manifestUrl: request.manifestUrl,
+      pageUrl: request.pageUrl,
+      domain: request.domain,
+      platform: request.platform || 'unknown',
+      timestamp: new Date().toISOString()
+    };
+
+    // Add to manifests array
+    const manifest = addOrUpdateManifest(capture);
+
+    // Send to API
+    sendToAPI(capture);
+
+    sendResponse({ success: true, manifest });
+    return true;
   } else if (request.action === 'pageMetadataExtracted') {
     // Content script enviou metadados automaticamente
     const pageUrl = request.metadata?.pageUrl;
@@ -627,7 +647,90 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     });
     return true;
   }
-  return true;
+  else if (request.action === 'getPrompts') {
+    // Proxy para buscar prompts da API (evita Mixed Content no popup iframe)
+    (async () => {
+      try {
+        let prompts = null;
+        for (const host of API_HOSTS) {
+          try {
+            const response = await fetch(`${host}/prompts`, { cache: 'no-store' });
+            if (response.ok) {
+              const data = await response.json();
+              if (data && data.prompts) {
+                prompts = data.prompts;
+                break;
+              }
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+
+        if (prompts) {
+          sendResponse({ success: true, prompts: prompts });
+        } else {
+          sendResponse({ success: false, error: 'Não foi possível carregar prompts' });
+        }
+      } catch (e) {
+        sendResponse({ success: false, error: e.message });
+      }
+    })();
+    return true; // Keep channel open
+  } else if (request.action === 'getPromptDetails') {
+    (async () => {
+      try {
+        const promptName = request.promptName;
+        let details = null;
+        for (const host of API_HOSTS) {
+          try {
+            const response = await fetch(`${host}/prompts/${encodeURIComponent(promptName)}`, { cache: 'no-store' });
+            if (response.ok) {
+              details = await response.json();
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+
+        if (details) {
+          sendResponse({ success: true, details: details });
+        } else {
+          sendResponse({ success: false, error: 'Detalhes não encontrados' });
+        }
+      } catch (e) {
+        sendResponse({ success: false, error: e.message });
+      }
+    })();
+    return true;
+  } else if (request.action === 'checkApiHealth') {
+    // Check if API is reachable
+    (async () => {
+      try {
+        let healthy = false;
+        for (const host of API_HOSTS) {
+          try {
+            const response = await fetch(`${host}/api/health`, {
+              cache: 'no-store',
+              signal: AbortSignal.timeout(3000) // 3 second timeout
+            });
+            if (response.ok) {
+              healthy = true;
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+        sendResponse({ success: healthy });
+      } catch (e) {
+        sendResponse({ success: false });
+      }
+    })();
+    return true;
+  }
+  // Don't return true for unhandled messages - let them fail naturally
 });
 
 // Função auxiliar para processar metadados
@@ -657,3 +760,35 @@ function processMetadata(metadata, tab, pageUrl, sendResponse) {
     sendResponse({ success: false, error: 'Não foi possível extrair metadados' });
   }
 }
+
+// Listener para clique no ícone da extensão (Toggle Overlay)
+chrome.action.onClicked.addListener(async (tab) => {
+  if (tab.id) {
+    // Verificar se é uma página válida para injeção
+    if (tab.url && (tab.url.startsWith('http') || tab.url.startsWith('file'))) {
+      try {
+        await chrome.tabs.sendMessage(tab.id, { action: 'TOGGLE_OVERLAY' });
+      } catch (err) {
+        console.log('[Video Extractor] Script não detectado, injetando...', err);
+
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js', 'overlay.js']
+          });
+
+          // Aguardar um pouco para garantir inicialização
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tab.id, { action: 'TOGGLE_OVERLAY' }).catch(e => {
+              console.error('[Video Extractor] Falha irrevel após injeção:', e);
+            });
+          }, 300);
+        } catch (injectionErr) {
+          console.error('[Video Extractor] Falha ao injetar scripts:', injectionErr);
+        }
+      }
+    } else {
+      console.log('[Video Extractor] Não é possível abrir overlay nesta página:', tab.url);
+    }
+  }
+});

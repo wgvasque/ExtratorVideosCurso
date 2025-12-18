@@ -7,7 +7,8 @@
         "webRequest",
         "storage",
         "scripting",
-        "activeTab"
+        "activeTab",
+        "clipboardWrite"
     ],
     "host_permissions": [
         "*://*.cloudflarestream.com/*",
@@ -20,6 +21,8 @@
         "*://*.googlevideo.com/*",
         "*://*.jwplatform.com/*",
         "*://*.jwpcdn.com/*",
+        "*://*.kiwify.com/*",
+        "*://*.kiwify.com.br/*",
         "http://localhost:5000/*",
         "http://127.0.0.1:5000/*"
     ],
@@ -29,16 +32,33 @@
                 "<all_urls>"
             ],
             "js": [
-                "content.js"
+                "content.js",
+                "overlay.js"
             ],
             "run_at": "document_idle"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "popup.html",
+                "icon16.png",
+                "icon48.png",
+                "icon128.png",
+                "popup.js",
+                "processing_ui.js",
+                "library.js",
+                "inject.js"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
         }
     ],
     "background": {
         "service_worker": "background.js"
     },
     "action": {
-        "default_popup": "popup.html",
         "default_icon": {
             "16": "icon16.png",
             "48": "icon48.png",

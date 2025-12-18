@@ -310,11 +310,65 @@ function templateV2SolarPop(reportData) {
         </div>
         ` : ''}
         <div class="meta-grid">
-            <div class="meta-item"><strong>URL Original</strong> ${htmlEscape(meta.url)}</div>
-            <div class="meta-item"><strong>Data</strong> ${htmlEscape(meta.date)}</div>
-            <div class="meta-item"><strong>IA Model</strong> ${htmlEscape(meta.model)}</div>
-            ${data.prompt_model_usado || data._modelo ? `<div class="meta-item"><strong>Prompt</strong> ${htmlEscape(data.prompt_model_usado || data._modelo)}</div>` : ''}
+            <div class="meta-item" style="display: flex; align-items: center; gap: 8px;">
+                <strong>🔗 URL Original</strong>
+                <a href="${htmlEscape(meta.url)}" target="_blank" style="color: #0284c7; text-decoration: none; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${htmlEscape(meta.url)}">
+                    ${meta.url.length > 50 ? htmlEscape(meta.url.substring(0, 30) + '...' + meta.url.substring(meta.url.length - 15)) : htmlEscape(meta.url)}
+                </a>
+            </div>
+            <div class="meta-item"><strong>📅 Data</strong> ${htmlEscape(meta.date)}</div>
+            <div class="meta-item"><strong>🤖 IA</strong> ${htmlEscape(meta.model)}${meta.origin ? ` <span style="color: #666; font-size: 11px;">(${htmlEscape(meta.origin)})</span>` : ''}</div>
+            ${data.prompt_model_usado || data._modelo ? `<div class="meta-item"><strong>📝 Prompt</strong> ${htmlEscape(data.prompt_model_usado || data._modelo)}</div>` : ''}
+            ${data.manifestUrl ? `
+            <div class="meta-item" style="display: flex; align-items: center; gap: 8px;">
+                <strong>📺 Manifest</strong>
+                <a href="${htmlEscape(data.manifestUrl)}" target="_blank" style="color: #059669; text-decoration: none; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${htmlEscape(data.manifestUrl)}">
+                    ${data.manifestUrl.length > 50 ? htmlEscape(data.manifestUrl.substring(0, 30) + '...' + data.manifestUrl.substring(data.manifestUrl.length - 15)) : htmlEscape(data.manifestUrl)}
+                </a>
+            </div>
+            ` : ''}
         </div>
+        ${meta.error ? `
+        <div style="margin-top: 10px; padding: 10px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px;">
+            <strong style="color: #dc2626;">⚠️ Erro da IA:</strong>
+            <span style="color: #7f1d1d; font-size: 12px;">${htmlEscape(meta.error.substring(0, 200))}${meta.error.length > 200 ? '...' : ''}</span>
+        </div>
+        ` : ''}
+        
+        ${data.tempo_processamento ? `
+        <div style="margin-top: 10px; padding: 12px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <strong style="color: #166534;">⏱️ Tempo Total: ${htmlEscape(data.tempo_processamento.total_formatado || '')}</strong>
+                ${data.tempo_processamento.etapas ? `
+                <span style="color: #15803d; font-size: 11px;">
+                    (resolve: ${data.tempo_processamento.etapas.resolve || 0}s | 
+                    ingest: ${data.tempo_processamento.etapas.ingest || 0}s | 
+                    transcr: ${data.tempo_processamento.etapas.transcription || 0}s | 
+                    sumário: ${data.tempo_processamento.etapas.summarize || 0}s)
+                </span>
+                ` : ''}
+            </div>
+        </div>
+        ` : ''}
+        
+        ${data.materiais_apoio && Array.isArray(data.materiais_apoio) && data.materiais_apoio.length > 0 ? `
+        <div style="margin-top: 15px; padding: 15px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 2px solid #0ea5e9; border-radius: 12px; box-shadow: 0 2px 8px rgba(14, 165, 233, 0.15);">
+            <strong style="color: #0369a1; font-size: 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                📎 Materiais de Apoio 
+                <span style="background: #0ea5e9; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px;">${data.materiais_apoio.length}</span>
+            </strong>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                ${data.materiais_apoio.map(m => `
+                    <li style="margin-bottom: 10px; padding: 8px 12px; background: white; border-radius: 8px; border: 1px solid #e0e7ff;">
+                        <a href="${htmlEscape(m.url || '')}" target="_blank" style="color: #0284c7; text-decoration: none; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                            🔗 ${htmlEscape(m.text || m.type || 'Material de Apoio')}
+                        </a>
+                        ${m.url ? `<div style="color: #64748b; font-size: 11px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${m.url.length > 70 ? htmlEscape(m.url.substring(0, 50) + '...') : htmlEscape(m.url)}</div>` : ''}
+                    </li>
+                `).join('')}
+            </ul>
+        </div>
+        ` : ''}
     </div>
     
     <!-- Botão de Reprocessamento -->
@@ -737,7 +791,7 @@ function templateV2SolarPop(reportData) {
 
         // 14. Materiais de Apoio
         const materiais = data.materiais_apoio || [];
-        if (materiais.length > 0) {
+        if (Array.isArray(materiais) && materiais.length > 0) {
             html += `
     <div class="section-card">
         <div class="card-header">

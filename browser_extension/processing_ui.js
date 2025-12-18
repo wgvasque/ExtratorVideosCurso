@@ -89,10 +89,18 @@ async function processVideoWithUI(pageUrl, manifestUrl, button) {
         videoUrlEl.textContent = pageUrl;
     }
 
-    // Limpar terminal
+    // Limpar terminal e adicionar log inicial
     if (terminalOutput) {
-        terminalOutput.innerHTML = '<div class="log-line log-info">▶ Iniciando processamento...</div>';
+        terminalOutput.innerHTML = '';
+        const timestamp = new Date().toLocaleTimeString('pt-BR');
+        terminalOutput.innerHTML = `
+            <div class="log-line log-info"><span style="color: #888;">[${timestamp}]</span> 🚀 Iniciando processamento...</div>
+            <div class="log-line log-info"><span style="color: #888;">[${timestamp}]</span> 📤 Enviando para API...</div>
+        `;
     }
+    // Resetar variáveis de log para permitir novas entradas
+    lastLogMessage = '';
+    lastStepType = '';
 
     // Iniciar timer local
     processingStartTime = Date.now();
@@ -129,7 +137,25 @@ async function processVideoWithUI(pageUrl, manifestUrl, button) {
 
         console.log('[Extension] Modelo de prompt selecionado:', promptModel);
 
-        // Enviar para API com manifestUrl direto (JWT assinado)
+        // Buscar metadados do manifest em memória via background script
+        let videoTitle = '';
+        let supportMaterials = [];
+        try {
+            const manifestData = await new Promise((resolve) => {
+                chrome.runtime.sendMessage({ action: 'getManifests' }, (response) => {
+                    const manifests = response?.manifests || [];
+                    const found = manifests.find(m => m.pageUrl === pageUrl);
+                    resolve(found || {});
+                });
+            });
+            videoTitle = manifestData.videoTitle || manifestData.pageTitle || '';
+            supportMaterials = manifestData.supportMaterials || [];
+            console.log('[Extension] Metadados encontrados:', { videoTitle, materials: supportMaterials.length });
+        } catch (e) {
+            console.warn('[Extension] Não foi possível buscar metadados:', e);
+        }
+
+        // Enviar para API com manifestUrl direto (JWT assinado) e metadados
         const response = await tryFetch('/api/process', {
             method: 'POST',
             headers: {
@@ -139,7 +165,9 @@ async function processVideoWithUI(pageUrl, manifestUrl, button) {
             body: JSON.stringify({
                 urls: [pageUrl],
                 manifestUrl: manifestUrl,  // Passa o JWT manifest diretamente
-                prompt_template: promptModel || undefined  // Envia prompt selecionado (nome completo do arquivo)
+                prompt_template: promptModel || undefined,  // Envia prompt selecionado (nome completo do arquivo)
+                videoTitle: videoTitle,  // Título do vídeo capturado pela extensão
+                supportMaterials: supportMaterials  // Materiais de apoio capturados
             })
         });
 
@@ -290,58 +318,103 @@ function showError(button, message) {
     }, 3000);
 }
 
-// Variável para evitar duplicação de logs
+// Variável para evitar duplicação de logs e rastrear etapa atual
 let lastLogMessage = '';
+let lastStepType = '';
 
 // Função para atualizar o terminal com logs
 function updateTerminalLog(message, type = 'info') {
     const terminalOutput = document.getElementById('terminal-output');
     if (!terminalOutput) return;
 
-    // Evitar duplicação do mesmo log
-    if (message === lastLogMessage) return;
-    lastLogMessage = message;
-
-    const timestamp = new Date().toLocaleTimeString('pt-BR');
-    const typeClass = `log-${type}`;
-
-    // Determinar ícone baseado no tipo de mensagem
+    // Detectar tipo de etapa baseado na mensagem
+    let stepType = 'default';
     let icon = '▶';
-    if (message.toLowerCase().includes('sucesso') || message.toLowerCase().includes('concluído')) {
+    const lowerMsg = message.toLowerCase();
+
+    if (lowerMsg.includes('resolvendo') || lowerMsg.includes('manifest') || lowerMsg.includes('fonte')) {
+        stepType = 'resolve';
+        icon = '🔍';
+    } else if (lowerMsg.includes('baixando') || lowerMsg.includes('download') || lowerMsg.includes('ffmpeg') || lowerMsg.includes('áudio')) {
+        stepType = 'download';
+        icon = '📥';
+    } else if (lowerMsg.includes('transcrev') || lowerMsg.includes('whisper') || lowerMsg.includes('🎤')) {
+        stepType = 'transcription';
+        icon = '🎤';
+    } else if (lowerMsg.includes('resumo') || lowerMsg.includes('gemini') || lowerMsg.includes('openrouter') || lowerMsg.includes('ia') || lowerMsg.includes('🤖')) {
+        stepType = 'summarize';
+        icon = '🤖';
+    } else if (lowerMsg.includes('salvando') || lowerMsg.includes('relatório') || lowerMsg.includes('json') || lowerMsg.includes('📝')) {
+        stepType = 'output';
+        icon = '📝';
+    } else if (lowerMsg.includes('sucesso') || lowerMsg.includes('concluído') || lowerMsg.includes('✅')) {
+        stepType = 'success';
         icon = '✅';
         type = 'success';
-    } else if (message.toLowerCase().includes('erro') || message.toLowerCase().includes('falha')) {
+    } else if (lowerMsg.includes('erro') || lowerMsg.includes('falha') || lowerMsg.includes('❌')) {
+        stepType = 'error';
         icon = '❌';
         type = 'error';
-    } else if (message.toLowerCase().includes('aviso') || message.toLowerCase().includes('warning')) {
+    } else if (lowerMsg.includes('aviso') || lowerMsg.includes('warning') || lowerMsg.includes('⚠️')) {
+        stepType = 'warning';
         icon = '⚠️';
         type = 'warning';
-    } else if (message.toLowerCase().includes('transcrição') || message.toLowerCase().includes('whisper')) {
-        icon = '🎤';
-    } else if (message.toLowerCase().includes('download') || message.toLowerCase().includes('ffmpeg')) {
-        icon = '📥';
-    } else if (message.toLowerCase().includes('gemini') || message.toLowerCase().includes('openrouter') || message.toLowerCase().includes('resumo')) {
-        icon = '🤖';
+    } else if (lowerMsg.includes('processando')) {
+        stepType = 'processing';
+        icon = '⏳';
     }
 
-    const logLine = document.createElement('div');
-    logLine.className = `log-line log-${type}`;
-    logLine.innerHTML = `<span style="color: #888;">[${timestamp}]</span> ${icon} ${message}`;
+    // Evitar duplicação: log apenas se mudou de etapa ou mensagem é diferente
+    if (stepType === lastStepType && message === lastLogMessage) return;
 
-    terminalOutput.appendChild(logLine);
+    // Se mudou de etapa, sempre logar
+    if (stepType !== lastStepType || message !== lastLogMessage) {
+        lastLogMessage = message;
+        lastStepType = stepType;
 
-    // Auto-scroll para o final
-    terminalOutput.scrollTop = terminalOutput.scrollHeight;
+        const timestamp = new Date().toLocaleTimeString('pt-BR');
+
+        const logLine = document.createElement('div');
+        logLine.className = `log-line log-${type}`;
+        logLine.innerHTML = `<span style="color: #888;">[${timestamp}]</span> ${icon} ${message}`;
+
+        terminalOutput.appendChild(logLine);
+
+        // Auto-scroll para o final
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    }
 }
 
 // Event listener para botão de ver relatório e checkbox de auto-process
 document.addEventListener('DOMContentLoaded', () => {
     const viewReportBtn = document.getElementById('view-report-btn');
     if (viewReportBtn) {
-        viewReportBtn.addEventListener('click', () => {
-            if (reportData) {
-                const reportUrl = `http://127.0.0.1:5000/v2`;
+        viewReportBtn.addEventListener('click', async () => {
+            if (reportData && reportData.domain && reportData.videoId) {
+                // Usar a mesma URL do botão "Ver" na biblioteca: /view/{domain}/{videoId}
+                // Remover query string do videoId se houver
+                const cleanVideoId = reportData.videoId.split('?')[0];
+                const reportUrl = `http://127.0.0.1:5000/view/${reportData.domain}/${cleanVideoId}`;
                 window.open(reportUrl, '_blank');
+            } else if (currentProcessingUrl) {
+                // Fallback: extrair domínio e videoId da URL de processamento
+                try {
+                    const url = new URL(currentProcessingUrl);
+                    const domain = url.hostname;
+                    const pathParts = url.pathname.split('/');
+                    // Pegar último segmento e remover query string
+                    const videoId = (pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2]).split('?')[0];
+                    if (domain && videoId) {
+                        const reportUrl = `http://127.0.0.1:5000/view/${domain}/${videoId}`;
+                        window.open(reportUrl, '_blank');
+                    } else {
+                        window.open('http://127.0.0.1:5000/v2', '_blank');
+                    }
+                } catch (e) {
+                    window.open('http://127.0.0.1:5000/v2', '_blank');
+                }
+            } else {
+                window.open('http://127.0.0.1:5000/v2', '_blank');
             }
         });
     }
