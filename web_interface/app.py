@@ -225,7 +225,7 @@ def start_processing():
         return jsonify({'error': 'Nenhuma URL válida'}), 400
     
     # Definir modelo de prompt como variável de ambiente para os subprocessos
-    os.environ['PROMPT_MODEL'] = prompt_model
+    os.environ['PROMPT_TEMPLATE'] = prompt_model
     print(f"🎯 [API] Modelo de prompt selecionado: {prompt_model}")
     
     # Se recebeu manifestUrl JWT, salvar no captured_manifests.json com metadados
@@ -343,7 +343,7 @@ def reprocess_summary():
         print(f"[OK] JSON válido com transcrição ({len(existing_data.get('transcricao_completa', ''))} chars)")
         
         # Definir modelo de prompt
-        os.environ['PROMPT_MODEL'] = prompt_model
+        os.environ['PROMPT_TEMPLATE'] = prompt_model
         
         # Executar reprocessamento em background
         def run_reprocess():
@@ -668,7 +668,9 @@ def get_report_data(domain, video_id):
                 '_modelo': report_data.get('_modelo') or report_data.get('prompt_model_usado') or '',
                 # URLs adicionais
                 'manifestUrl': report_data.get('manifestUrl') or report_data.get('manifest_url') or '',
-                'pageUrl': report_data.get('pageUrl') or report_data.get('url_video') or report_data.get('url') or ''
+                'pageUrl': report_data.get('pageUrl') or report_data.get('url_video') or report_data.get('url') or '',
+                # Tempo de processamento
+                'tempo_processamento': report_data.get('tempo_processamento') or {}
             },
             'transcription': transcricao,
             # NOVO: Erros por etapa
@@ -688,10 +690,19 @@ def list_prompts():
     """Listar prompts disponíveis com validação"""
     try:
         prompts = prompt_loader.list_available_prompts()
+        
+        # Obter template padrão da configuração
+        default_template = os.getenv('PROMPT_TEMPLATE', 'modelo2').lower()
+        
+        # Verificar se o template padrão é válido
+        default_valid = any(p['name'] == default_template and p['valid'] for p in prompts)
+        
         return jsonify({
             'prompts': prompts,
             'total': len(prompts),
-            'valid_count': sum(1 for p in prompts if p['valid'])
+            'valid_count': sum(1 for p in prompts if p['valid']),
+            'default_template': default_template,
+            'default_valid': default_valid
         })
     except Exception as e:
         print(f"Erro ao listar prompts: {e}")
@@ -768,6 +779,28 @@ def process_videos_batch(urls):
         processing_state['current_url'] = url
         pu = urlparse(url)
         referer = f"{pu.scheme}://{pu.netloc}"
+        domain = pu.netloc  # Extrair domínio para buscar credenciais
+        
+        # Buscar credenciais para o domínio
+        credentials = {}
+        if CREDENTIALS_FILE.exists():
+            try:
+                with open(CREDENTIALS_FILE, 'r', encoding='utf-8') as cf:
+                    all_creds = json.load(cf)
+                    # Buscar credenciais exatas ou por match parcial
+                    if domain in all_creds:
+                        credentials = all_creds[domain]
+                    else:
+                        # Tentar match parcial (ex: alunos.segueadii.com.br contém segueadii)
+                        for d, creds in all_creds.items():
+                            if d in domain or domain in d:
+                                credentials = creds
+                                break
+            except Exception as e:
+                print(f"⚠️ Erro ao carregar credenciais: {e}")
+        
+        email = credentials.get('email', '')
+        senha = credentials.get('senha', '')
         
         # Emitir progresso via WebSocket
         elapsed = (datetime.now() - processing_state['start_time']).total_seconds() if processing_state['start_time'] else 0
@@ -838,7 +871,14 @@ def process_videos_batch(urls):
                 '--referer', referer
             ]
             
-            print(f"🔍 [DEBUG] Comando: {' '.join(cmd)}")
+            # Adicionar credenciais se disponíveis para o domínio
+            if email:
+                cmd.extend(['--email', email])
+            if senha:
+                cmd.extend(['--senha', senha])
+            
+            print(f"🔍 [DEBUG] Comando: {' '.join(cmd[:7])}...")  # Ocultar credenciais no log
+            print(f"🔍 [DEBUG] Credenciais para {domain}: {'✅ Encontradas' if email else '❌ Não encontradas'}")
             
             # Criar arquivo temporário para capturar output
             temp_output = project_root / 'web_interface' / 'logs' / f'output_{i}.log'
@@ -875,22 +915,35 @@ def process_videos_batch(urls):
                     with open(temp_output, 'r', encoding='utf-8') as f:
                         partial_output = f.read()
                     
-                    # Detectar fase baseado no output
+                    # Detectar fase baseado nos marcadores [TEMPO] do output
+                    # A ordem é: resolve -> ingest -> transcription -> summarize -> output
                     lower_output = partial_output.lower()
                     
-                    # Prioridade para marcadores [TEMPO] mais recentes
-                    if '[tempo] etapa summarize:' in lower_output or '[tempo] etapa output:' in lower_output:
-                        processing_state['current_step'] = f"📝 Salvando relatório {i}/{len(urls)}..."
-                    elif '[tempo] etapa transcription:' in lower_output or ('gemini' in lower_output or 'openrouter' in lower_output):
+                    # Verificar marcadores na ordem reversa (do mais avançado ao inicial)
+                    if '[ok] json atualizado' in lower_output or '[ok] markdown salvo' in lower_output:
+                        processing_state['current_step'] = f"💾 Salvando arquivos {i}/{len(urls)}..."
+                    elif '[tempo] etapa output:' in lower_output:
+                        processing_state['current_step'] = f"💾 Salvando arquivos {i}/{len(urls)}..."
+                    elif '[tempo] etapa summarize:' in lower_output:
+                        processing_state['current_step'] = f"💾 Salvando arquivos {i}/{len(urls)}..."
+                    elif '[ok] gemini' in lower_output or '[ok] openrouter' in lower_output or 'gemini funcionou' in lower_output:
+                        processing_state['current_step'] = f"🤖 Geração do resumo concluída {i}/{len(urls)}..."
+                    elif 'tentando gemini' in lower_output or 'tentando openrouter' in lower_output or 'summarize_transcription' in lower_output:
                         processing_state['current_step'] = f"🤖 Gerando resumo com IA {i}/{len(urls)}..."
-                    elif '[tempo] etapa ingest:' in lower_output or 'transcrição' in lower_output or 'transcri' in lower_output or 'whisper' in lower_output:
+                    elif '[tempo] etapa transcription:' in lower_output:
+                        processing_state['current_step'] = f"🤖 Gerando resumo com IA {i}/{len(urls)}..."
+                    elif 'chunks' in lower_output or 'whisper' in lower_output or 'transcrevendo' in lower_output or 'transcrever' in lower_output:
                         processing_state['current_step'] = f"🎤 Transcrevendo áudio {i}/{len(urls)}..."
-                    elif '[tempo] etapa resolve:' in lower_output or 'ffmpeg' in lower_output or 'download' in lower_output or 'yt-dlp' in lower_output:
+                    elif '[tempo] etapa ingest:' in lower_output:
+                        processing_state['current_step'] = f"🎤 Transcrevendo áudio {i}/{len(urls)}..."
+                    elif 'ffmpeg' in lower_output or 'yt-dlp' in lower_output or 'baixando' in lower_output or 'download' in lower_output:
                         processing_state['current_step'] = f"📥 Baixando áudio {i}/{len(urls)}..."
-                    elif 'extension' in lower_output or 'manifest' in lower_output:
-                        processing_state['current_step'] = f"🔍 Resolvendo fonte {i}/{len(urls)}..."
-                    elif 'relatório' in lower_output or 'html' in lower_output:
-                        processing_state['current_step'] = f"📝 Gerando relatório {i}/{len(urls)}..."
+                    elif '[tempo] etapa resolve:' in lower_output:
+                        processing_state['current_step'] = f"📥 Baixando áudio {i}/{len(urls)}..."
+                    elif 'extension' in lower_output or 'manifest' in lower_output or 'captured_manifests' in lower_output:
+                        processing_state['current_step'] = f"🔍 Detectando fonte de vídeo {i}/{len(urls)}..."
+                    elif 'resolver fonte' in lower_output or 'resolve' in lower_output:
+                        processing_state['current_step'] = f"🔍 Detectando fonte de vídeo {i}/{len(urls)}..."
                 except:
                     pass
                 
@@ -1350,6 +1403,208 @@ def convert_report_v2():
     except Exception as e:
         print(f"Erro na conversão v2: {e}")
         return jsonify({'error': str(e)}), 500
+
+# ============================================
+# ROTAS DE CONFIGURAÇÕES
+# ============================================
+
+@app.route('/settings')
+def settings_page():
+    """Página de configurações"""
+    return render_template('settings.html')
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Carregar configurações do arquivo .env"""
+    env_path = PROJECT_ROOT / '.env'
+    settings = {}
+    
+    if env_path.exists():
+        with open(env_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    settings[key.strip()] = value.strip()
+    
+    # Mapear para os campos do frontend
+    return jsonify({
+        'gemini_api_key': settings.get('GEMINI_API_KEY', ''),
+        'openrouter_api_key': settings.get('OPENROUTER_API_KEY', ''),
+        'ia_provider': 'openrouter' if settings.get('USE_OPENROUTER', 'false').lower() == 'true' else 'gemini',
+        'openrouter_model': settings.get('OPENROUTER_MODEL', 'google/gemini-2.0-flash-exp:free'),
+        'use_fallback': settings.get('OPENROUTER_USE_FALLBACK', 'true').lower() == 'true',
+        'prompt_model': settings.get('PROMPT_TEMPLATE', 'modelo2'),
+        'whisper_model': settings.get('WHISPER_MODEL', 'small'),
+        'whisper_device': settings.get('WHISPER_DEVICE', 'cpu'),
+        'sumarios_dir': settings.get('SUMARIOS_DIR', 'sumarios'),
+        'cache_ttl': int(settings.get('CACHE_TTL_HOURS', '72')),
+        # Novos campos
+        'email': settings.get('EMAIL', ''),
+        'senha': settings.get('SENHA', '')
+    })
+
+@app.route('/api/settings', methods=['POST'])
+def save_settings():
+    """Salvar configurações no arquivo .env"""
+    try:
+        data = request.json
+        env_path = PROJECT_ROOT / '.env'
+        
+        # Carregar .env existente preservando comentários
+        existing_lines = []
+        existing_keys = {}
+        
+        if env_path.exists():
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    existing_lines.append(line)
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith('#') and '=' in stripped:
+                        key = stripped.split('=', 1)[0].strip()
+                        existing_keys[key] = len(existing_lines) - 1
+        
+        # Mapear campos do frontend para variáveis de ambiente
+        env_updates = {
+            'GEMINI_API_KEY': data.get('gemini_api_key', ''),
+            'OPENROUTER_API_KEY': data.get('openrouter_api_key', ''),
+            'USE_OPENROUTER': 'true' if data.get('ia_provider') == 'openrouter' else 'false',
+            'OPENROUTER_MODEL': data.get('openrouter_model', 'google/gemini-2.0-flash-exp:free'),
+            'OPENROUTER_USE_FALLBACK': 'true' if data.get('use_fallback') else 'false',
+            'PROMPT_TEMPLATE': data.get('prompt_model', 'modelo2'),
+            'WHISPER_MODEL': data.get('whisper_model', 'small'),
+            'WHISPER_DEVICE': data.get('whisper_device', 'cpu'),
+            'SUMARIOS_DIR': data.get('sumarios_dir', 'sumarios'),
+            'CACHE_TTL_HOURS': str(data.get('cache_ttl', 72)),
+            # Novos campos
+            'EMAIL': data.get('email', ''),
+            'SENHA': data.get('senha', '')
+        }
+        
+        # Atualizar ou adicionar variáveis
+        for key, value in env_updates.items():
+            if key in existing_keys:
+                idx = existing_keys[key]
+                existing_lines[idx] = f"{key}={value}\n"
+            else:
+                existing_lines.append(f"{key}={value}\n")
+        
+        # Salvar arquivo
+        with open(env_path, 'w', encoding='utf-8') as f:
+            f.writelines(existing_lines)
+        
+        # Recarregar variáveis de ambiente
+        load_dotenv(override=True)
+        
+        return jsonify({'status': 'success', 'message': 'Configurações salvas!'})
+        
+    except Exception as e:
+        print(f"Erro ao salvar configurações: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ==========================================
+# CREDENCIAIS POR DOMÍNIO
+# ==========================================
+CREDENTIALS_FILE = PROJECT_ROOT / 'credentials.json'
+
+@app.route('/api/credentials', methods=['GET'])
+def get_credentials():
+    """Carregar credenciais por domínio"""
+    try:
+        if CREDENTIALS_FILE.exists():
+            with open(CREDENTIALS_FILE, 'r', encoding='utf-8') as f:
+                credentials = json.load(f)
+        else:
+            credentials = {}
+        return jsonify(credentials)
+    except Exception as e:
+        print(f"Erro ao carregar credenciais: {e}")
+        return jsonify({}), 500
+
+@app.route('/api/credentials', methods=['POST'])
+def save_credentials():
+    """Salvar credenciais por domínio"""
+    try:
+        data = request.json
+        with open(CREDENTIALS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return jsonify({'status': 'success', 'message': 'Credenciais salvas!'})
+    except Exception as e:
+        print(f"Erro ao salvar credenciais: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/credentials/<domain>', methods=['GET'])
+def get_domain_credentials(domain):
+    """Obter credenciais de um domínio específico"""
+    try:
+        if CREDENTIALS_FILE.exists():
+            with open(CREDENTIALS_FILE, 'r', encoding='utf-8') as f:
+                credentials = json.load(f)
+            if domain in credentials:
+                return jsonify(credentials[domain])
+        return jsonify({'email': '', 'senha': ''})
+    except Exception as e:
+        return jsonify({'email': '', 'senha': ''}), 500
+
+@app.route('/api/settings/test-gemini', methods=['POST'])
+def test_gemini():
+    """Testar conexão com Gemini API"""
+    try:
+        import google.generativeai as genai
+        
+        api_key = request.json.get('api_key', '')
+        if not api_key:
+            return jsonify({'success': False, 'message': 'Chave não informada'})
+        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        response = model.generate_content("Responda apenas: OK")
+        
+        if response and response.text:
+            return jsonify({'success': True, 'message': 'Conectado!'})
+        else:
+            return jsonify({'success': False, 'message': 'Resposta inválida'})
+            
+    except Exception as e:
+        error_msg = str(e)
+        if 'API_KEY_INVALID' in error_msg:
+            return jsonify({'success': False, 'message': 'Chave inválida'})
+        return jsonify({'success': False, 'message': f'Erro: {error_msg[:50]}'})
+
+@app.route('/api/settings/test-openrouter', methods=['POST'])
+def test_openrouter():
+    """Testar conexão com OpenRouter API"""
+    try:
+        import requests
+        
+        api_key = request.json.get('api_key', '')
+        if not api_key:
+            return jsonify({'success': False, 'message': 'Chave não informada'})
+        
+        response = requests.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': 'google/gemini-2.0-flash-exp:free',
+                'messages': [{'role': 'user', 'content': 'Responda apenas: OK'}],
+                'max_tokens': 10
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            return jsonify({'success': True, 'message': 'Conectado!'})
+        elif response.status_code == 401:
+            return jsonify({'success': False, 'message': 'Chave inválida'})
+        else:
+            return jsonify({'success': False, 'message': f'HTTP {response.status_code}'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro: {str(e)[:50]}'})
+
 
 if __name__ == '__main__':
     print("🚀 Iniciando Video Processor Web Interface...")

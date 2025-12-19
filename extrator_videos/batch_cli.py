@@ -593,6 +593,56 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         md.append(f"**URL:** {data.get('url_video', '')}\n\n")
         md.append(f"**Data:** {data.get('data_processamento', '')}\n\n")
         
+        # Metadados técnicos
+        if data.get("manifestUrl"):
+            md.append(f"**Manifest:** {data.get('manifestUrl')}\n\n")
+        if data.get("ia_origem") or data.get("ia_modelo"):
+            ia_info = []
+            if data.get("ia_origem"):
+                ia_info.append(f"Origem: {data['ia_origem']}")
+            if data.get("ia_modelo"):
+                ia_info.append(f"Modelo: {data['ia_modelo']}")
+            md.append(f"**IA:** {' | '.join(ia_info)}\n\n")
+        
+        # Tempo de Processamento
+        if data.get("tempo_processamento"):
+            tp = data["tempo_processamento"]
+            tempo_total = tp.get("total_formatado", "")
+            etapas = tp.get("etapas", {})
+            
+            # Função para formatar segundos de forma legível
+            def formatar_tempo(segundos):
+                if segundos is None:
+                    return "0s"
+                s = float(segundos)
+                if s < 1:
+                    return f"{s:.1f}s"
+                elif s < 60:
+                    return f"{int(s)}s"
+                else:
+                    m = int(s // 60)
+                    seg = int(s % 60)
+                    if seg == 0:
+                        return f"{m}min"
+                    return f"{m}min {seg}s"
+            
+            if tempo_total:
+                md.append(f"**⏱️ Tempo de Processamento:** {tempo_total}\n\n")
+                if etapas:
+                    md.append("| Etapa | Tempo |\n")
+                    md.append("|-------|-------|\n")
+                    if etapas.get("resolve"):
+                        md.append(f"| 🔍 Detecção de vídeo | {formatar_tempo(etapas['resolve'])} |\n")
+                    if etapas.get("ingest"):
+                        md.append(f"| 📥 Download do áudio | {formatar_tempo(etapas['ingest'])} |\n")
+                    if etapas.get("transcription"):
+                        md.append(f"| 🎤 Transcrição | {formatar_tempo(etapas['transcription'])} |\n")
+                    if etapas.get("summarize"):
+                        md.append(f"| 🤖 Geração do resumo | {formatar_tempo(etapas['summarize'])} |\n")
+                    if etapas.get("output"):
+                        md.append(f"| 💾 Salvamento | {formatar_tempo(etapas['output'])} |\n")
+                    md.append("\n")
+        
         # Resumo Executivo
         if data.get("resumo_executivo"):
             md.append("## 📋 Resumo Executivo\n\n")
@@ -605,11 +655,199 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
                 md.append(f"{idx}. {obj}\n")
             md.append("\n")
         
+        # Conceitos Fundamentais
+        if data.get("conceitos_fundamentais"):
+            md.append("## 📚 Conceitos Fundamentais\n\n")
+            for conceito in data["conceitos_fundamentais"]:
+                if isinstance(conceito, dict):
+                    nome = conceito.get("nome", "Conceito")
+                    definicao = conceito.get("definicao", "")
+                    exemplos = conceito.get("exemplos", [])
+                    importancia = conceito.get("importancia", "")
+                    md.append(f"### {nome}\n\n")
+                    if definicao:
+                        md.append(f"**Definição:** {definicao}\n\n")
+                    if exemplos:
+                        md.append("**Exemplos:**\n")
+                        for ex in exemplos:
+                            md.append(f"- {ex}\n")
+                        md.append("\n")
+                    if importancia:
+                        md.append(f"**Importância:** {importancia}\n\n")
+                else:
+                    md.append(f"- {conceito}\n")
+            md.append("\n")
+        
+        # Estrutura Central
+        if data.get("estrutura_central"):
+            md.append("## 🏗️ Estrutura Central\n\n")
+            for item in data["estrutura_central"]:
+                if isinstance(item, dict):
+                    titulo = item.get("titulo", "Tópico")
+                    descricao = item.get("descricao", "")
+                    subtopicos = item.get("subtopicos", [])
+                    atividade = item.get("atividade", {})
+                    md.append(f"### {titulo}\n\n")
+                    if descricao:
+                        md.append(f"{descricao}\n\n")
+                    if subtopicos:
+                        for st in subtopicos:
+                            md.append(f"- {st}\n")
+                        md.append("\n")
+                    if atividade and isinstance(atividade, dict):
+                        md.append(f"**Atividade:** {atividade.get('descricao', '')}\n")
+                        if atividade.get('resultado_esperado'):
+                            md.append(f"**Resultado Esperado:** {atividade.get('resultado_esperado')}\n")
+                        md.append("\n")
+                else:
+                    md.append(f"- {item}\n")
+            md.append("\n")
+        
         # Ideias Chave
         if data.get("ideias_chave"):
             md.append("## 💡 Ideias Chave\n\n")
             for idea in data["ideias_chave"]:
                 md.append(f"- {idea}\n")
+            md.append("\n")
+        
+        # Ferramentas e Métodos
+        if data.get("ferramentas_metodos"):
+            md.append("## 🛠️ Ferramentas e Métodos\n\n")
+            for ferramenta in data["ferramentas_metodos"]:
+                if isinstance(ferramenta, dict):
+                    nome = ferramenta.get("nome", "Ferramenta")
+                    descricao = ferramenta.get("descricao", "")
+                    uso = ferramenta.get("uso", "")
+                    md.append(f"### {nome}\n\n")
+                    if descricao:
+                        md.append(f"{descricao}\n\n")
+                    if uso:
+                        md.append(f"**Uso:** {uso}\n\n")
+                else:
+                    md.append(f"- {ferramenta}\n")
+            md.append("\n")
+        
+        # Exemplos
+        if data.get("exemplos"):
+            md.append("## 📝 Exemplos\n\n")
+            for exemplo in data["exemplos"]:
+                if isinstance(exemplo, dict):
+                    titulo = exemplo.get("titulo", "Exemplo")
+                    descricao = exemplo.get("descricao", "")
+                    md.append(f"### {titulo}\n\n")
+                    if descricao:
+                        md.append(f"{descricao}\n\n")
+                else:
+                    md.append(f"- {exemplo}\n")
+            md.append("\n")
+        
+        # Abordagem Pedagógica
+        if data.get("abordagem_pedagogica"):
+            md.append("## 📖 Abordagem Pedagógica\n\n")
+            abord = data["abordagem_pedagogica"]
+            if isinstance(abord, dict):
+                if abord.get("estilo"):
+                    md.append(f"**Estilo:** {abord['estilo']}\n\n")
+                if abord.get("metodologia"):
+                    md.append(f"**Metodologia:** {abord['metodologia']}\n\n")
+                if abord.get("pilares"):
+                    md.append("**Pilares:**\n")
+                    for p in abord["pilares"]:
+                        md.append(f"- {p}\n")
+                    md.append("\n")
+            else:
+                md.append(f"{abord}\n\n")
+        
+        # Citações Marcantes
+        citacoes = data.get("citacoes_marcantes") or data.get("citações_marcantes")
+        if citacoes:
+            md.append("## 💬 Citações Marcantes\n\n")
+            for cit in citacoes:
+                if isinstance(cit, dict):
+                    texto = cit.get("texto", cit.get("citacao", ""))
+                    autor = cit.get("autor", "")
+                    contexto = cit.get("contexto", "")
+                    if texto:
+                        md.append(f"> \"{texto}\"\n")
+                        if autor:
+                            md.append(f"> — {autor}\n")
+                        if contexto:
+                            md.append(f"> *{contexto}*\n")
+                        md.append("\n")
+                else:
+                    md.append(f"> \"{cit}\"\n\n")
+        
+        # Orientações Práticas
+        if data.get("orientacoes_praticas"):
+            md.append("## ✅ Orientações Práticas\n\n")
+            for orient in data["orientacoes_praticas"]:
+                if isinstance(orient, dict):
+                    titulo = orient.get("titulo", "Orientação")
+                    descricao = orient.get("descricao", "")
+                    md.append(f"### {titulo}\n\n")
+                    if descricao:
+                        md.append(f"{descricao}\n\n")
+                else:
+                    md.append(f"- {orient}\n")
+            md.append("\n")
+        
+        # Pontos de Memorização
+        if data.get("pontos_memorizacao"):
+            md.append("## 🧠 Pontos de Memorização\n\n")
+            pm = data["pontos_memorizacao"]
+            if isinstance(pm, dict):
+                if pm.get("pilares"):
+                    md.append("**Pilares:**\n")
+                    for p in pm["pilares"]:
+                        md.append(f"- {p}\n")
+                    md.append("\n")
+                if pm.get("dicas"):
+                    md.append("**Dicas:**\n")
+                    for d in pm["dicas"]:
+                        md.append(f"- {d}\n")
+                    md.append("\n")
+                if pm.get("alertas"):
+                    md.append("**Alertas:**\n")
+                    for a in pm["alertas"]:
+                        md.append(f"- ⚠️ {a}\n")
+                    md.append("\n")
+            elif isinstance(pm, list):
+                for p in pm:
+                    md.append(f"- {p}\n")
+                md.append("\n")
+        
+        # Preparação para Próxima Aula
+        if data.get("preparacao_proxima_aula"):
+            md.append("## 📅 Preparação para Próxima Aula\n\n")
+            prep = data["preparacao_proxima_aula"]
+            if isinstance(prep, dict):
+                if prep.get("tema"):
+                    md.append(f"**Tema:** {prep['tema']}\n\n")
+                if prep.get("tarefas"):
+                    md.append("**Tarefas:**\n")
+                    for t in prep["tarefas"]:
+                        md.append(f"- {t}\n")
+                    md.append("\n")
+            elif isinstance(prep, list):
+                for p in prep:
+                    md.append(f"- {p}\n")
+                md.append("\n")
+            else:
+                md.append(f"{prep}\n\n")
+        
+        # Próximos Passos
+        if data.get("proximos_passos"):
+            md.append("## ➡️ Próximos Passos\n\n")
+            for idx, passo in enumerate(data["proximos_passos"], start=1):
+                if isinstance(passo, dict):
+                    titulo = passo.get("titulo", passo.get("passo", f"Passo {idx}"))
+                    descricao = passo.get("descricao", "")
+                    md.append(f"{idx}. **{titulo}**")
+                    if descricao:
+                        md.append(f": {descricao}")
+                    md.append("\n")
+                else:
+                    md.append(f"{idx}. {passo}\n")
             md.append("\n")
         
         # Materiais de Apoio
@@ -639,6 +877,15 @@ def process_url(u: str, referer: str, outdir: str, email: str, senha: str):
         # Registrar tempo de output
         tempos_por_etapa["output"] = round(time.time() - tempo_etapa_inicio, 2)
         print(f"[TEMPO] Etapa output: {tempos_por_etapa['output']}s")
+        
+        # Atualizar JSON com tempo de output (já que foi calculado após o primeiro salvamento)
+        try:
+            data["tempo_processamento"]["etapas"]["output"] = tempos_por_etapa["output"]
+            with open(jpath, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            print(f"[OK] JSON atualizado com tempo de output")
+        except Exception as e:
+            print(f"[AVISO] Não foi possível atualizar JSON com tempo de output: {e}")
         
         # REMOVIDO: Geração de HTML (agora feita dinamicamente pela interface web)
         # A interface web renderiza os relatórios em tempo real a partir do JSON

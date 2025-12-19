@@ -41,6 +41,9 @@ class PromptLoader:
             return prompts
         
         for prompt_file in sorted(self.prompts_dir.glob("*.md")):
+            # Ignorar README e outros arquivos que não são prompts
+            if prompt_file.stem.lower() in ['readme', 'index', 'template']:
+                continue
             # Obter metadados
             metadata = self.get_prompt_metadata(prompt_file.stem)
             

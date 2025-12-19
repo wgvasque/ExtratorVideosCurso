@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚙️ Configurações | Video Processor</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap"
+        rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                    },
+                    colors: {
+                        base: '#FFF8E7',      /* Cosmic Latte */
+                        ink: '#2D3436',       /* Void Charcoal */
+                        accent: '#FF6B6B',    /* Bittersweet Coral */
+                        pop: '#4ECDC4',       /* Medium Turquoise */
+                        sun: '#FFE66D',       /* Maize Yellow */
+                    },
+                    boxShadow: {
+                        'retro': '4px 4px 0px 0px #2D3436',
+                        'retro-hover': '6px 6px 0px 0px #2D3436',
+                        'retro-active': '2px 2px 0px 0px #2D3436',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #FFF8E7;
+            color: #2D3436;
+        }
+
+        .solar-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            background-color: #FFF8E7;
+            overflow: hidden;
+        }
+
+        .solar-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.6;
+            animation: blob 15s infinite alternate;
+        }
+
+        @keyframes blob {
+            0% {
+                transform: scale(1);
+            }
+
+            100% {
+                transform: scale(1.1);
+            }
+        }
+
+        .blob-1 {
+            top: -10%;
+            left: -10%;
+            width: 500px;
+            height: 500px;
+            background: #FF6B6B;
+        }
+
+        .blob-2 {
+            top: 40%;
+            right: -20%;
+            width: 400px;
+            height: 400px;
+            background: #4ECDC4;
+        }
+
+        /* Button Standards */
+        .btn-retro {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            text-transform: uppercase;
+            border: 2px solid #2D3436;
+            border-radius: 0.75rem;
+            padding: 0.5rem 1rem;
+            box-shadow: 4px 4px 0px 0px #2D3436;
+            transition: all 0.1s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-retro:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px 0px #2D3436;
+        }
+
+        .btn-retro:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px 0px #2D3436;
+        }
+
+        .btn-primary {
+            background-color: #FF6B6B;
+            color: white;
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: #2D3436;
+        }
+
+        .btn-tertiary {
+            background-color: #FFE66D;
+            color: #2D3436;
+        }
+
+        .retro-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            border: 2px solid #2D3436;
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            box-shadow: 4px 4px 0px 0px #2D3436;
+            transition: all 0.2s;
+        }
+
+        .retro-input:focus {
+            outline: none;
+            background: white;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px 0px #FF6B6B;
+        }
+
+        .retro-select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            border: 2px solid #2D3436;
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            box-shadow: 4px 4px 0px 0px #2D3436;
+            cursor: pointer;
+        }
+
+        .retro-select:focus {
+            outline: none;
+            background: white;
+        }
+
+        .card {
+            background: white;
+            border: 2px solid #2D3436;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 4px 4px 0px 0px #2D3436;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            border: 2px solid #2D3436;
+        }
+
+        .status-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 700;
+            font-family: 'Space Grotesk', sans-serif;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+            border: 2px solid #2D3436;
+            box-shadow: 4px 4px 0px 0px #2D3436;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            background: #4ECDC4;
+        }
+
+        .toast.error {
+            background: #FF6B6B;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center py-10 px-4 selection:bg-accent selection:text-white">
+
+    <div class="solar-bg">
+        <div class="solar-blob blob-1"></div>
+        <div class="solar-blob blob-2"></div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="w-full max-w-3xl flex justify-between items-center mb-8">
+        <div>
+            <h1 class="font-display font-black text-4xl tracking-tight leading-none">
+                ⚙️ <span class="text-accent">CONFIGURAÇÕES</span>
+            </h1>
+        </div>
+        <a href="/v2" class="btn-retro btn-secondary text-sm">
+            ← VOLTAR
+        </a>
+    </header>
+
+    <main class="w-full max-w-3xl space-y-6">
+
+        <!-- API KEYS -->
+        <section class="card">
+            <h2 class="font-display font-black text-2xl mb-6 flex items-center gap-2">
+                🔑 CHAVES DE API
+            </h2>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block font-display font-bold text-sm mb-2 ml-1">GEMINI API KEY</label>
+                    <div class="flex gap-3">
+                        <input type="password" id="gemini_api_key" class="retro-input flex-1" placeholder="AIzaSy...">
+                        <button class="btn-retro btn-tertiary text-sm" onclick="testGemini()">TESTAR</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2 ml-1">
+                        Obtenha em: <a href="https://aistudio.google.com/apikey" target="_blank"
+                            class="text-accent hover:underline">Google AI Studio</a>
+                    </p>
+                    <div id="gemini-status" class="mt-2"></div>
+                </div>
+
+                <div>
+                    <label class="block font-display font-bold text-sm mb-2 ml-1">OPENROUTER API KEY <span
+                            class="font-normal text-gray-500">(opcional)</span></label>
+                    <div class="flex gap-3">
+                        <input type="password" id="openrouter_api_key" class="retro-input flex-1"
+                            placeholder="sk-or-v1-...">
+                        <button class="btn-retro btn-tertiary text-sm" onclick="testOpenRouter()">TESTAR</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2 ml-1">
+                        Obtenha em: <a href="https://openrouter.ai/keys" target="_blank"
+                            class="text-accent hover:underline">OpenRouter.ai</a>
+                    </p>
+                    <div id="openrouter-status" class="mt-2"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- MODELO DE IA -->
+        <section class="card">
+            <h2 class="font-display font-black text-2xl mb-6 flex items-center gap-2">
+                🤖 MODELO DE IA
+            </h2>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block font-display font-bold text-sm mb-2 ml-1">PROVEDOR PREFERIDO</label>
+                    <select id="ia_provider" class="retro-select">
+                        <option value="gemini">Gemini (Recomendado - Grátis)</option>
+                        <option value="openrouter">OpenRouter (Vários modelos grátis)</option>
+                        <option value="auto">Automático (Gemini → OpenRouter)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block font-display font-bold text-sm mb-2 ml-1">MODELO OPENROUTER</label>
+                    <select id="openrouter_model" class="retro-select">
+                        <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (Recomendado)</option>
+                        <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B</option>
+                        <option value="deepseek/deepseek-chat-v3:free">DeepSeek Chat V3</option>
+                        <option value="mistralai/mistral-small-3.1-24b:free">Mistral Small 24B</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-3 bg-sun/30 p-3 rounded-lg border-2 border-ink">
+                    <input type="checkbox" id="use_fallback" class="w-5 h-5 cursor-pointer" checked>
+                    <label for="use_fallback" class="font-display font-bold text-sm cursor-pointer">
+                        USAR FALLBACK AUTOMÁTICO
+                    </label>
+                    <span class="text-xs text-gray-500">(tenta outro modelo se falhar)</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- MODELO DE PROMPT -->
+        <section class="card">
+            <h2 class="font-display font-black text-2xl mb-6 flex items-center gap-2">
+                📝 MODELO DE PROMPT
+            </h2>
+
+            <div>
+                <label class="block font-display font-bold text-sm mb-2 ml-1">TEMPLATE DE RESUMO</label>
+                <select id="prompt_model" class="retro-select">
+                    <option value="modelo2">Modelo 2 - Padrão (Equilibrado)</option>
+                    <option value="modelo4">Modelo 4 - Híbrido (Framework P.R.O.M.P.T.)</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-2 ml-1">
+                    Modelo 2: Resumos balanceados. Modelo 4: Mais detalhado e estruturado.
+                </p>
+            </div>
+        </section>
+
+        <!-- WHISPER -->
+        <section class="card">
+            <h2 class="font-display font-black text-2xl mb-6 flex items-center gap-2">
+                🎤 TRANSCRIÇÃO (WHISPER)
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block font-display font-bold text-sm mb-2 ml-1">MODELO</label>
+                    <select id="whisper_model" class="retro-select">
+                        <option value="small">Small (~500MB) - Recomendado</option>
+                        <option value="medium">Medium (~1.5GB) - Mais preciso</option>
+                        <option value="large-v3">Large V3 (~3GB) - Máxima qualidade</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block font-display font-bold text-sm mb-2 ml-1">DISPOSITIVO</label>
+                    <select id="whisper_device" class="retro-select">
+                        <option value="cpu">CPU (Compatível com todos)</option>
+                        <option value="cuda">GPU NVIDIA (Mais rápido)</option>
+                    </select>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-3 ml-1">
+                GPU requer CUDA instalado. CPU funciona em qualquer computador.
+            </p>
+        </section>
+
+        <!-- ARMAZENAMENTO -->
+        <section class="card">
+            <h2 class="font-display font-black text-2xl mb-6 flex items-center gap-2">
+                📁 ARMAZENAMENTO
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block font-display font-bold text-sm mb-2 ml-1">DIRETÓRIO DE SUMÁRIOS</label>
+                    <input type="text" id="sumarios_dir" class="retro-input" value="sumarios">
+                </div>
+
+                <div>
+                    <label class="block font-display font-bold text-sm mb-2 ml-1">CACHE TTL (HORAS)</label>
+                    <input type="number" id="cache_ttl" class="retro-input" value="72" min="1" max="720">
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-3 ml-1">
+                Transcrições em cache serão reutilizadas por este período.
+            </p>
+        </section>
+
+        <!-- BOTÃO SALVAR -->
+        <div class="text-center pt-4 pb-8">
+            <button class="btn-retro btn-primary text-lg px-12 py-3" onclick="saveSettings()">
+                💾 SALVAR CONFIGURAÇÕES
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const API_BASE = '';
+
+        document.addEventListener('DOMContentLoaded', loadSettings);
+
+        async function loadSettings() {
+            try {
+                const resp = await fetch(API_BASE + '/api/settings');
+                if (resp.ok) {
+                    const data = await resp.json();
+
+                    if (data.gemini_api_key) {
+                        document.getElementById('gemini_api_key').value = data.gemini_api_key;
+                        showStatus('gemini-status', true, 'Configurada');
+                    }
+                    if (data.openrouter_api_key) {
+                        document.getElementById('openrouter_api_key').value = data.openrouter_api_key;
+                        showStatus('openrouter-status', true, 'Configurada');
+                    }
+
+                    document.getElementById('ia_provider').value = data.ia_provider || 'gemini';
+                    document.getElementById('openrouter_model').value = data.openrouter_model || 'google/gemini-2.0-flash-exp:free';
+                    document.getElementById('use_fallback').checked = data.use_fallback !== false;
+                    document.getElementById('prompt_model').value = data.prompt_model || 'modelo2';
+                    document.getElementById('whisper_model').value = data.whisper_model || 'small';
+                    document.getElementById('whisper_device').value = data.whisper_device || 'cpu';
+                    document.getElementById('sumarios_dir').value = data.sumarios_dir || 'sumarios';
+                    document.getElementById('cache_ttl').value = data.cache_ttl || 72;
+                }
+            } catch (e) {
+                console.error('Erro ao carregar configurações:', e);
+            }
+        }
+
+        async function saveSettings() {
+            const settings = {
+                gemini_api_key: document.getElementById('gemini_api_key').value,
+                openrouter_api_key: document.getElementById('openrouter_api_key').value,
+                ia_provider: document.getElementById('ia_provider').value,
+                openrouter_model: document.getElementById('openrouter_model').value,
+                use_fallback: document.getElementById('use_fallback').checked,
+                prompt_model: document.getElementById('prompt_model').value,
+                whisper_model: document.getElementById('whisper_model').value,
+                whisper_device: document.getElementById('whisper_device').value,
+                sumarios_dir: document.getElementById('sumarios_dir').value,
+                cache_ttl: parseInt(document.getElementById('cache_ttl').value)
+            };
+
+            try {
+                const resp = await fetch(API_BASE + '/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+
+                if (resp.ok) {
+                    showToast('✅ CONFIGURAÇÕES SALVAS!', 'success');
+                } else {
+                    const err = await resp.json();
+                    showToast('❌ Erro: ' + (err.error || 'Falha ao salvar'), 'error');
+                }
+            } catch (e) {
+                showToast('❌ Erro de conexão', 'error');
+            }
+        }
+
+        async function testGemini() {
+            const key = document.getElementById('gemini_api_key').value;
+            if (!key) {
+                showStatus('gemini-status', false, 'Informe a chave');
+                return;
+            }
+
+            showStatus('gemini-status', null, 'Testando...');
+
+            try {
+                const resp = await fetch(API_BASE + '/api/settings/test-gemini', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: key })
+                });
+                const data = await resp.json();
+                showStatus('gemini-status', data.success, data.message);
+            } catch (e) {
+                showStatus('gemini-status', false, 'Erro de conexão');
+            }
+        }
+
+        async function testOpenRouter() {
+            const key = document.getElementById('openrouter_api_key').value;
+            if (!key) {
+                showStatus('openrouter-status', false, 'Informe a chave');
+                return;
+            }
+
+            showStatus('openrouter-status', null, 'Testando...');
+
+            try {
+                const resp = await fetch(API_BASE + '/api/settings/test-openrouter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: key })
+                });
+                const data = await resp.json();
+                showStatus('openrouter-status', data.success, data.message);
+            } catch (e) {
+                showStatus('openrouter-status', false, 'Erro de conexão');
+            }
+        }
+
+        function showStatus(elementId, success, message) {
+            const el = document.getElementById(elementId);
+            if (success === null) {
+                el.innerHTML = `<span class="status-badge status-warning">⏳ ${message}</span>`;
+            } else if (success) {
+                el.innerHTML = `<span class="status-badge status-success">✅ ${message}</span>`;
+            } else {
+                el.innerHTML = `<span class="status-badge status-error">❌ ${message}</span>`;
+            }
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show ' + type;
+            setTimeout(() => {
+                toast.className = 'toast';
+            }, 3000);
+        }
+    </script>
+</body>
+
+</html>

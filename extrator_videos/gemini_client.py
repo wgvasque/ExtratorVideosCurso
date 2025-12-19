@@ -18,46 +18,41 @@ def configure():
         raise RuntimeError("GEMINI_API_KEY ausente")
     genai.configure(api_key=key)
 
-def load_prompt():
+def get_prompt_template_name() -> str:
     """
-    Carrega configuração do prompt.
-    Suporta seleção via variável de ambiente PROMPT_MODEL:
-    - 'modelo2' ou 'model2' -> usa PROMPT_MODELO2_PATH (padrão: prompt_padrao.json)
-    - 'modelo4' ou 'model4' -> usa PROMPT_MODELO4_PATH (padrão: prompt_modelo4.json)
-    
-    PROMPT_PATH sobrescreve tudo se definido.
+    Obtém o nome do template de prompt a usar.
+    Variável de ambiente: PROMPT_TEMPLATE (padrão: modelo2)
+    Valores válidos: modelo2, modelo3, modelo4, modelo5
     """
-    # Verificar se há override direto via PROMPT_PATH
-    direct_path = os.getenv("PROMPT_PATH")
-    if direct_path:
-        try:
-            with open(direct_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"[AVISO] Erro ao carregar PROMPT_PATH={direct_path}: {e}")
+    return os.getenv("PROMPT_TEMPLATE", "modelo2").lower()
+
+def load_prompt_text(transcription: str) -> str:
+    """
+    Carrega e formata o prompt usando o sistema prompt_loader.
+    Usa a pasta modelos_prompts/ com arquivos .md
+    """
+    template_name = get_prompt_template_name()
     
-    # Verificar seleção de modelo
-    prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
+    # Usar prompt_loader para carregar o template
+    prompt_text = prompt_loader.get_prompt_for_processing(template_name, transcription)
     
-    # Determinar arquivo baseado no modelo
-    if prompt_model in ["modelo4", "model4", "4", "hibrido", "hybrid"]:
-        default_path = os.getenv("PROMPT_MODELO4_PATH", "prompt_modelo4.json")
-    else:
-        default_path = os.getenv("PROMPT_MODELO2_PATH", "prompt_padrao.json")
+    if not prompt_text:
+        print(f"⚠️ Template '{template_name}' não encontrado, usando modelo2")
+        prompt_text = prompt_loader.get_prompt_for_processing("modelo2", transcription)
     
-    try:
-        with open(default_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[AVISO] Erro ao carregar {default_path}: {e}")
-        # Fallback para prompt_padrao.json
-        try:
-            fallback = "prompt_padrao.json"
-            with open(fallback, "r", encoding="utf-8") as f:
-                print(f"[OK] Usando fallback: {fallback}")
-                return json.load(f)
-        except Exception:
-            return None
+    if not prompt_text:
+        # Fallback mínimo se nenhum template existir
+        return f"""Analise a transcrição e crie um resumo estruturado em JSON com:
+- resumo_executivo: resumo em 200-300 palavras
+- objetivos_aprendizagem: lista de objetivos
+- conceitos_fundamentais: lista de conceitos
+- pontos_chave: lista de pontos principais
+
+TRANSCRIÇÃO:
+{transcription}"""
+    
+    return prompt_text
+
 
 def _prefer_models_prefix(name: str) -> str:
     try:
@@ -383,91 +378,62 @@ def summarize_transcription(text: str, blocks: list):
 
 def summarize_transcription_full(text: str, blocks: list, prompt_template: str = None) -> dict:
     """
-    Gera resumo completo usando Modelo 2 (14 seções)
+    Gera resumo completo usando templates da pasta modelos_prompts/
     
     Args:
         text: Transcrição do vídeo
         blocks: Blocos de metadados
-        prompt_template: Nome do template de prompt (opcional). Se fornecido, usa prompt_loader.
-                        Se None, usa sistema JSON legado (load_prompt)
+        prompt_template: Nome do template (opcional). Se None, usa PROMPT_TEMPLATE ou 'modelo2'
     """
     configure()
     
-    # Determinar qual sistema de prompt usar
-    prompt_text = None
-    if prompt_template:
-        # Usar novo sistema de prompt_loader
-        print(f"📝 Usando template de prompt: {prompt_template}")
-        prompt_text = prompt_loader.get_prompt_for_processing(prompt_template, text)
-        if not prompt_text:
-            print(f"⚠️ Template '{prompt_template}' não encontrado, usando sistema legado")
-            prompt_template = None  # Fallback para sistema legado
+    # Determinar template a usar
+    template_name = prompt_template or get_prompt_template_name()
+    print(f"📝 Usando template de prompt: {template_name}")
     
-    # Se não usar prompt_template, usar sistema JSON legado
-    cfg = None
-    if not prompt_template:
-        cfg = load_prompt()
+    # Carregar prompt formatado
+    prompt = load_prompt_text(text)
     
-    # Suporta modelo_gemini (novo) ou modelo (legado)
-    modelo_cfg = None
-    if cfg and cfg.get("parametros"):
-        modelo_cfg = cfg["parametros"].get("modelo_gemini") or cfg["parametros"].get("modelo")
-    
+    # Configurar modelo Gemini
     candidates = [
-        _prefer_models_prefix(modelo_cfg) if modelo_cfg else None,
         "models/gemini-2.5-pro",
         "models/gemini-2.5-flash",
         "models/gemini-2.0-flash",
     ]
-    candidates = [c for c in candidates if c]
     
     mdl = None
     chosen = None
     last_error = ""
     
+    # Configuração padrão de geração
+    gen_conf = {
+        "temperature": 0.3,
+        "top_p": 0.9,
+        "candidate_count": 1,
+        "max_output_tokens": 16384,
+    }
+    
     for name in candidates:
         try:
-            gen_conf = None
-            if cfg:
-                gen_conf = {
-                    "temperature": cfg["parametros"].get("temperatura", 0.3),
-                    "top_p": cfg["parametros"].get("top_p", 0.9),
-                    "candidate_count": cfg["parametros"].get("candidate_count", 1),
-                    "max_output_tokens": cfg["parametros"].get("max_tokens", 16384),
-                }
-            mdl = genai.GenerativeModel(name, generation_config=gen_conf) if gen_conf else genai.GenerativeModel(name)
+            mdl = genai.GenerativeModel(name, generation_config=gen_conf)
             chosen = name
             break
         except Exception as e:
             last_error = str(e)
     
-    # Construir prompt
-    if prompt_text:
-        # Usar prompt do template (já formatado com transcrição)
-        prompt = prompt_text
-    elif cfg and "prompt" in cfg:
-        # Usar sistema JSON legado
-        prompt = build_modelo2_prompt(cfg, text, blocks)
-    else:
-        prompt = build_fallback_prompt(text, blocks)
-    
     try:
         if mdl is None:
             raise RuntimeError("Modelo Gemini indisponível: " + last_error)
         
-        to = cfg["parametros"].get("timeout", 120) if cfg else 120
-        resp = mdl.generate_content(prompt, request_options={"timeout": to})
+        resp = mdl.generate_content(prompt, request_options={"timeout": 120})
         raw = extract_response_text(resp)
         
-        # Detectar qual modelo de prompt está sendo usado
-        prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
-        
-        # Usar parser apropriado
-        if prompt_model in ["modelo4", "model4", "4", "hibrido", "hybrid"]:
-            print(f"🎯 Usando parser do Modelo 4 (framework P.R.O.M.P.T.)")
+        # Detectar qual template está sendo usado para parser apropriado
+        if template_name in ["modelo4", "modelo5"]:
+            print(f"🎯 Usando parser do Modelo 4/5 (avançado)")
             obj = parse_modelo4_response(raw)
         else:
-            print(f"📊 Usando parser do Modelo 2 (padrão)")
+            print(f"📊 Usando parser do Modelo 2/3 (padrão)")
             obj = parse_modelo2_response(raw)
         
         if not obj:
@@ -480,6 +446,7 @@ def summarize_transcription_full(text: str, blocks: list, prompt_template: str =
             "prompt": prompt,
             "origin": "gemini",
             "error": "",
+            "template": template_name,
         }
     except Exception as e:
         return {
@@ -489,6 +456,7 @@ def summarize_transcription_full(text: str, blocks: list, prompt_template: str =
             "prompt": prompt if 'prompt' in locals() else "",
             "origin": "failed",
             "error": str(e),
+            "template": template_name,
         }
 
 def parse_raw_json(raw: str) -> dict:

@@ -14,6 +14,18 @@ function htmlEscape(str) {
         .replace(/'/g, '&#039;');
 }
 
+// Função para formatar segundos de forma legível
+function formatTime(seconds) {
+    if (seconds === null || seconds === undefined) return '0s';
+    const s = parseFloat(seconds);
+    if (s < 1) return s.toFixed(1) + 's';
+    if (s < 60) return Math.round(s) + 's';
+    const m = Math.floor(s / 60);
+    const seg = Math.round(s % 60);
+    if (seg === 0) return m + 'min';
+    return m + 'min ' + seg + 's';
+}
+
 // ===== FUNÇÕES GLOBAIS DE REPROCESSAMENTO =====
 let reprocessTimer = null;
 let reprocessSeconds = 0;
@@ -337,17 +349,18 @@ function templateV2SolarPop(reportData) {
         
         ${data.tempo_processamento ? `
         <div style="margin-top: 10px; padding: 12px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac; border-radius: 8px;">
-            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;">
                 <strong style="color: #166534;">⏱️ Tempo Total: ${htmlEscape(data.tempo_processamento.total_formatado || '')}</strong>
-                ${data.tempo_processamento.etapas ? `
-                <span style="color: #15803d; font-size: 11px;">
-                    (resolve: ${data.tempo_processamento.etapas.resolve || 0}s | 
-                    ingest: ${data.tempo_processamento.etapas.ingest || 0}s | 
-                    transcr: ${data.tempo_processamento.etapas.transcription || 0}s | 
-                    sumário: ${data.tempo_processamento.etapas.summarize || 0}s)
-                </span>
-                ` : ''}
             </div>
+            ${data.tempo_processamento.etapas ? `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 8px;">
+                ${data.tempo_processamento.etapas.resolve ? `<div style="background: white; padding: 6px 10px; border-radius: 6px; font-size: 12px;"><span style="color: #166534;">🔍 Detecção:</span> <strong>${formatTime(data.tempo_processamento.etapas.resolve)}</strong></div>` : ''}
+                ${data.tempo_processamento.etapas.ingest ? `<div style="background: white; padding: 6px 10px; border-radius: 6px; font-size: 12px;"><span style="color: #166534;">📥 Download:</span> <strong>${formatTime(data.tempo_processamento.etapas.ingest)}</strong></div>` : ''}
+                ${data.tempo_processamento.etapas.transcription ? `<div style="background: white; padding: 6px 10px; border-radius: 6px; font-size: 12px;"><span style="color: #166534;">🎤 Transcrição:</span> <strong>${formatTime(data.tempo_processamento.etapas.transcription)}</strong></div>` : ''}
+                ${data.tempo_processamento.etapas.summarize ? `<div style="background: white; padding: 6px 10px; border-radius: 6px; font-size: 12px;"><span style="color: #166534;">🤖 Resumo IA:</span> <strong>${formatTime(data.tempo_processamento.etapas.summarize)}</strong></div>` : ''}
+                ${data.tempo_processamento.etapas.output ? `<div style="background: white; padding: 6px 10px; border-radius: 6px; font-size: 12px;"><span style="color: #166534;">💾 Salvamento:</span> <strong>${formatTime(data.tempo_processamento.etapas.output)}</strong></div>` : ''}
+            </div>
+            ` : ''}
         </div>
         ` : ''}
         

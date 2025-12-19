@@ -108,11 +108,11 @@
     "captured_at": "2025-12-17T22:14:56.738769"
   },
   "https://www.youtube.com/": {
-    "manifestUrl": "https://rr3---sn-cg51pauxax-btoz.googlevideo.com/videoplayback?expire=1766106100&ei=lE9EaeOyG7v7-LAPiLHS4Q0&ip=177.0.39.144&id=o-AISIYJiTrL_FOPrxUwfU7bZzAIVPMzI_HW1KchIRjPaq&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=3&met=1766084500%2C&mh=5g&mm=31%2C29&mn=sn-cg51pauxax-btoz%2Csn-bg0e6nls&ms=au%2Crdu&mv=m&mvi=3&pl=25&rms=au%2Cau&initcwndbps=2285000&siu=1&spc=wH4Qq0BkrzAnpF6LE1D335W7fQRcQ9f9Aar-eB0DwPogPjtRZg&svpuc=1&ns=JhkHQgH2zJFXobg_9m03lhQR&sabr=1&rqh=1&mt=1766084007&fvip=3&keepalive=yes&fexp=51355912%2C51552689%2C51565116%2C51565682%2C51580968&c=WEB&n=9YaTMQmFMT932A&sparams=expire%2Cei%2Cip%2Cid%2Csource%2Crequiressl%2Cxpc%2Csiu%2Cspc%2Csvpuc%2Cns%2Csabr%2Crqh&sig=AJfQdSswRgIhANh7DpG5VvnwvmiooPdMywuCSuWz9AAvIf8cCj4K5wLHAiEA6Ol34ft4uMDlS_pAJlIB9aa9Q-rd43ns7YEDjK_g5Do%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAPMljBWumUpZTQN7U4qoEfVAQ-WLQUIsTXh-yj4P48S5AiA8XPUFnY4M_uyFl86mLc5LIiZR1wKzu_YMU1uUECAg1Q%3D%3D&cpn=ZyijI_TyuT4HHz1-&cver=2.20251215.05.00&rn=365&alr=yes",
+    "manifestUrl": "https://rr4---sn-cg51pauxax-btos.googlevideo.com/videoplayback?expire=1766190651&ei=25lFad2gJ7K09cYP29aAkQk&ip=177.0.39.180&id=o-AN1W0GW8YotSyHRoV4ZBCWvitUiwjVK5n5jgknbJVAUU&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=174&met=1766169051%2C&mh=fl&mm=31%2C29&mn=sn-cg51pauxax-btos%2Csn-bg0e6ney&ms=au%2Crdu&mv=m&mvi=4&pl=25&rms=au%2Cau&ctier=SH&initcwndbps=2265000&siu=1&spc=wH4QqyaTdk8ExmVqHKPVdCUhDruuoqvkGDTCymuejwAwuhCWhQ&svpuc=1&ns=LzKVK5mhDan8Kj0Ag-0VoxQR&sabr=1&rqh=1&mt=1766168702&fvip=5&keepalive=yes&fexp=51355912%2C51552689%2C51565116%2C51565682%2C51580968&c=WEB&n=ohbTKtQtZfkFaQ&sparams=expire%2Cei%2Cip%2Cid%2Csource%2Crequiressl%2Cxpc%2Cctier%2Csiu%2Cspc%2Csvpuc%2Cns%2Csabr%2Crqh&sig=AJfQdSswRQIgZxMdcS7vhu2QBKZRFGqkQbCIuYUi3ASJ9ve8zWv1j-ECIQDAm_3Hl6tKj0iVLvFJYldyT1JqavyNS86hUVPo3cyYVw%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAMpmAGwWPLla4RW2HWJKIgwfTn82K7ee6MbCovmfviTXAiAheYoUHzkwA5hmjX1gzMY9ke2sZMQe2PflEvP349uVyw%3D%3D&cpn=812JqbVdLdqR8cZ9&cver=2.20251215.05.00&rn=134&alr=yes",
     "domain": "www.youtube.com",
-    "timestamp": "2025-12-18T22:09:08.573Z",
-    "captured_at": "2025-12-18T19:09:08.920504",
-    "videoTitle": "YouTube",
+    "timestamp": "2025-12-19T18:33:10.647Z",
+    "captured_at": "2025-12-19T15:33:11.048112",
+    "videoTitle": "(12) YouTube",
     "supportMaterials": []
   },
   "https://www.youtube.com/watch?v=cHyvuib8hWg": {
@@ -287,6 +287,38 @@
     "timestamp": "2025-12-18T23:03:08.384Z",
     "captured_at": "2025-12-18T20:03:08.722440",
     "videoTitle": "CPMI do INSS quer ouvir Weverton Rocha, alvo da PF | CNN 360º - YouTube",
+    "supportMaterials": []
+  },
+  "https://www.youtube.com/shorts/9bNRwdExoo8": {
+    "manifestUrl": "https://rr2---sn-cg51pauxax-btos.googlevideo.com/videoplayback?expire=1766165933&ei=TTlFaerGFMPM-LAPpbzEqQs&ip=177.0.39.180&id=o-AEBmC4TSH3_gyimUlnZTdwQnf-sTwakjgDb__aayLBSy&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=0&met=1766144333%2C&mh=Zv&mm=31%2C29&mn=sn-cg51pauxax-btos%2Csn-bg0e6n7e&ms=au%2Crdu&mv=m&mvi=2&pl=25&rms=au%2Cau&initcwndbps=2032500&siu=1&spc=wH4Qq6Y8V2oecszUPinH4eukx9PikHMBWiMubxOqaNEJbMiYGg&svpuc=1&ns=82l5IqdxVbvVTepR60TQIWQR&sabr=1&rqh=1&mt=1766143979&fvip=2&keepalive=yes&fexp=51355912%2C51552689%2C51565116%2C51565682%2C51580968&c=WEB&n=Wm_Zn6Mrl9UYVw&sparams=expire%2Cei%2Cip%2Cid%2Csource%2Crequiressl%2Cxpc%2Csiu%2Cspc%2Csvpuc%2Cns%2Csabr%2Crqh&sig=AJfQdSswRQIgaWjoB6GhQ6h6GJP4yUZaF5CO6nL_TGbHT_Y7nskfAtQCIQD82PCpZThdoxBKulEEjaucDQXlT5HiPgA_J4fo_-9aHQ%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgenxORFxZhelNkPWAQEQWthVXppYIQvDm5b7AaqiGKwkCIDX0gQJ1-bMCtggb2LdJ3ti6S5IUYpHhnwK0r09nfG3m&cpn=XDcOE8vGI0_6aUO9&cver=2.20251215.05.00&rn=15&alr=yes",
+    "domain": "www.youtube.com",
+    "timestamp": "2025-12-19T11:39:25.861Z",
+    "captured_at": "2025-12-19T08:39:26.182439",
+    "videoTitle": "Integre Pagamentos no Seu App Facilmente com Stripe #shorts",
+    "supportMaterials": []
+  },
+  "https://www.youtube.com/shorts/rMEjrPj7bws": {
+    "manifestUrl": "https://rr3---sn-cg51pauxax-btoz.googlevideo.com/videoplayback?expire=1766165898&ei=KjlFaZOMHfax9cYPg5n-qA8&ip=177.0.39.180&id=o-AI05SCYvQ9VQbQ-TLs4dGtn6HtO3XZAeupyl-OXMIrGL&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=184&met=1766144298%2C&mh=a-&mm=31%2C29&mn=sn-cg51pauxax-btoz%2Csn-bg0e6nel&ms=au%2Crdu&mv=m&mvi=3&pl=25&rms=au%2Cau&initcwndbps=2290000&siu=1&spc=wH4Qq8jnZtaSztyOH5CxM1IE9rWrQJwoqeMJnhLplSiy-plW7A&svpuc=1&ns=RGvi_ENIUx0_a2Q0GB0DmCIR&sabr=1&rqh=1&mt=1766143739&fvip=1&keepalive=yes&fexp=51355912%2C51552689%2C51565116%2C51565682%2C51580968&c=WEB&n=jSzah-xCbFdvjg&sparams=expire%2Cei%2Cip%2Cid%2Csource%2Crequiressl%2Cxpc%2Csiu%2Cspc%2Csvpuc%2Cns%2Csabr%2Crqh&sig=AJfQdSswRgIhALpEaBWWd_A8h1wnQk_GEeVb1Sf5Zijt88qm_n57AQaoAiEA0174bS2DI1rkjDQ8ZeONBafd2NOkK5zKC4jcN9kNQ38%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRgIhAMvxwv0jGh89pppNjyGHJbNJNXzeYGplLVg1m8J0DnrqAiEA2ILfuFkWt7lqtCqUnOiPnSUQa8OvVD22-tJFMtzVnFM%3D&cpn=1_FEIE1nftW6290S&cver=2.20251215.05.00&rn=9&alr=yes",
+    "domain": "www.youtube.com",
+    "timestamp": "2025-12-19T11:38:21.922Z",
+    "captured_at": "2025-12-19T08:38:22.258933",
+    "videoTitle": "(4) DEUS PROVERÁ. ...CL #noticias #deustemumapalavrapravoce #caminhoparaumavidamelhor AME IGREJA - YouTube",
+    "supportMaterials": []
+  },
+  "https://www.youtube.com/watch?v=uj4e4LUb6ac": {
+    "manifestUrl": "https://rr3---sn-cg51pauxax-bto6.googlevideo.com/videoplayback?expire=1766190518&ei=VZlFaeClPNq-1sQPrZWngAI&ip=177.0.39.180&id=o-AE0-fi8tSIHXUxLpB8Xmr8ugzSAdMmzGZ5QyMqFAcP4R&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=431&met=1766168918%2C&mh=Xa&mm=31%2C29&mn=sn-cg51pauxax-bto6%2Csn-bg0e6n7y&ms=au%2Crdu&mv=m&mvi=3&pl=25&rms=au%2Cau&initcwndbps=2312500&siu=1&spc=wH4Qq-R_xEOx-tLFjNYdlgy8stQ1FlN-JxIH9NJclC2cKRvtNw&svpuc=1&ns=MlX5Krw1lqO-QIh_aFcoet0R&sabr=1&rqh=1&mt=1766168465&fvip=1&keepalive=yes&fexp=51355912%2C51552689%2C51565116%2C51565682%2C51580968&c=WEB&n=iRItVkZK2R8XeA&sparams=expire%2Cei%2Cip%2Cid%2Csource%2Crequiressl%2Cxpc%2Csiu%2Cspc%2Csvpuc%2Cns%2Csabr%2Crqh&sig=AJfQdSswRQIgbXff5WnPlJE_LAnz_6MMNBFKrGyY8_aVyTs5Y0XpaCQCIQCTd2mF02lqOUuECc1IllVedTmNfrITCY0Qo_g2AYkr7w%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAL5n5zRwcCqcQOc4-bH3bQGjvhMnNJj39_GOpkYjhBsIAiB-9mZHORVE7OqiY3E7GD8ELzEjJvflvXy--iTA0jgvwA%3D%3D&cpn=7gVly-W28kQyIzjn&cver=2.20251215.05.00&rn=73&alr=yes",
+    "domain": "www.youtube.com",
+    "timestamp": "2025-12-19T18:28:41.316Z",
+    "captured_at": "2025-12-19T15:28:41.455583",
+    "videoTitle": "Integre Pagamentos no Seu App Facilmente com Stripe #shorts",
+    "supportMaterials": []
+  },
+  "https://www.youtube.com/shorts/JImpujiZ92g": {
+    "manifestUrl": "https://rr1---sn-cg51pauxax-btoz.googlevideo.com/videoplayback?expire=1766193910&ei=lqZFadqhJbWW-LAP4d-5sQ8&ip=177.0.39.180&id=o-AIT6iSv0PAPm0YtUm4m2iEGAtBh5XbXfqe3CniKdxDL0&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=96&met=1766172310%2C&mh=KL&mm=31%2C29&mn=sn-cg51pauxax-btoz%2Csn-bg0s7n7e&ms=au%2Crdu&mv=m&mvi=1&pl=25&rms=au%2Cau&initcwndbps=2430000&siu=1&spc=wH4Qq2-5aYf6B_e7_w7d-bom33KJRCLN7J1nbW-ztwyQUrUplQ&svpuc=1&ns=CFOxki7WGroLbWxR-POVlBwR&sabr=1&rqh=1&mt=1766172079&fvip=3&keepalive=yes&fexp=51355912%2C51552689%2C51565116%2C51565682%2C51580968&c=WEB&n=1a1p6fgoguyFjQ&sparams=expire%2Cei%2Cip%2Cid%2Csource%2Crequiressl%2Cxpc%2Csiu%2Cspc%2Csvpuc%2Cns%2Csabr%2Crqh&sig=AJfQdSswRQIgVlwtt0Jtw2GkGAVtk_aUOlrnn1zEiNMQSmDTaC33ydsCIQDA-gmEi9qmb25oL9JTa5s_qzaiZXn9eaPXun_FkW2EJA%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIhAM5g1wEvuSpZkGlCaJqQzSHBtkWvWKbw4JWweKmfwdlGAiA8PtTuGBNivctI7J2mb07mIki-WozOWdxnUPtezcUIzw%3D%3D&cpn=EX0vXIUeJs3DYELP&cver=2.20251217.01.00&rn=3&alr=yes",
+    "domain": "www.youtube.com",
+    "timestamp": "2025-12-19T19:25:13.474Z",
+    "captured_at": "2025-12-19T16:25:13.796457",
+    "videoTitle": "App Link na Bio em Minutos com Pagamento Integrado! #shorts",
     "supportMaterials": []
   }
 }

@@ -1,7 +1,7 @@
 """
 Cliente para integração com OpenRouter.ai
 Permite usar múltiplos modelos LLM através de uma única API
-Agora utiliza configuração unificada do prompt_padrao.json
+Usa templates de prompt da pasta modelos_prompts/
 """
 import os
 import requests
@@ -10,53 +10,41 @@ import re
 from typing import Dict, List, Optional
 from . import prompt_loader
 
-# Importar load_prompt do gemini_client para configuração unificada
-def _load_prompt_config():
+def get_prompt_template_name() -> str:
     """
-    Carrega configuração do prompt JSON (mesmo usado pelo Gemini)
-    Usa PROMPT_PATH, PROMPT_MODEL, PROMPT_MODELO2_PATH e PROMPT_MODELO4_PATH
+    Obtém o nome do template de prompt a usar.
+    Variável de ambiente: PROMPT_TEMPLATE (padrão: modelo2)
+    Valores válidos: modelo2, modelo3, modelo4, modelo5
     """
-    # Verificar override direto
-    direct_path = os.getenv("PROMPT_PATH")
-    if direct_path:
-        try:
-            with open(direct_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    
-    # Verificar seleção de modelo
-    prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
-    
-    if prompt_model in ["modelo4", "model4", "4", "hibrido", "hybrid"]:
-        default_path = os.getenv("PROMPT_MODELO4_PATH", "prompt_modelo4.json")
-    else:
-        default_path = os.getenv("PROMPT_MODELO2_PATH", "prompt_padrao.json")
-    
-    try:
-        with open(default_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        # Fallback
-        try:
-            with open("prompt_padrao.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return None
+    return os.getenv("PROMPT_TEMPLATE", "modelo2").lower()
 
-def _build_prompt_from_config(cfg: dict, text: str, blocks: List[dict], use_blocks: bool) -> str:
-    """Constrói prompt a partir da configuração JSON unificada"""
-    if not cfg:
-        # Fallback para prompt hardcoded se não houver config
-        return _build_fallback_prompt(text, blocks, use_blocks)
+def load_prompt_text(transcription: str) -> str:
+    """
+    Carrega e formata o prompt usando o sistema prompt_loader.
+    Usa a pasta modelos_prompts/ com arquivos .md
+    """
+    template_name = get_prompt_template_name()
     
-    # Usar mesma função do gemini_client para garantir consistência
-    try:
-        from .gemini_client import build_modelo2_prompt
-        return build_modelo2_prompt(cfg, text, blocks)
-    except Exception:
-        # Fallback se importação falhar
-        return _build_fallback_prompt(text, blocks, use_blocks)
+    # Usar prompt_loader para carregar o template
+    prompt_text = prompt_loader.get_prompt_for_processing(template_name, transcription)
+    
+    if not prompt_text:
+        print(f"⚠️ Template '{template_name}' não encontrado, usando modelo2")
+        prompt_text = prompt_loader.get_prompt_for_processing("modelo2", transcription)
+    
+    if not prompt_text:
+        # Fallback mínimo se nenhum template existir
+        return f"""Analise a transcrição e crie um resumo estruturado em JSON com:
+- resumo_executivo: resumo em 200-300 palavras
+- objetivos_aprendizagem: lista de objetivos
+- conceitos_fundamentais: lista de conceitos
+- pontos_chave: lista de pontos principais
+
+TRANSCRIÇÃO:
+{transcription}"""
+    
+    return prompt_text
+
 
 
 def _build_fallback_prompt(text: str, blocks: List[dict], use_blocks: bool) -> str:
@@ -96,7 +84,7 @@ def summarize_with_openrouter(
         blocks: Blocos segmentados com timestamps (opcional)
         model: Modelo a usar (padrão: variável de ambiente ou gpt-4o-mini)
         use_blocks: Se True, inclui blocos no prompt (aumenta tamanho)
-        prompt_template: Nome do template de prompt (opcional). Se fornecido, usa prompt_loader.
+        prompt_template: Nome do template de prompt (opcional). Se None, usa PROMPT_TEMPLATE
     
     Returns:
         Dict com: data, raw, model, prompt, origin, error
@@ -112,41 +100,20 @@ def summarize_with_openrouter(
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY não configurada no arquivo .env")
     
-    # Determinar qual sistema de prompt usar
-    prompt = None
-    cfg = None
+    # Determinar template a usar
+    template_name = prompt_template or get_prompt_template_name()
+    print(f"📝 Usando template de prompt: {template_name}")
     
-    if prompt_template:
-        # Usar novo sistema de prompt_loader
-        print(f"📝 Usando template de prompt: {prompt_template}")
-        prompt = prompt_loader.get_prompt_for_processing(prompt_template, text)
-        if not prompt:
-            print(f"⚠️ Template '{prompt_template}' não encontrado, usando sistema legado")
-            prompt_template = None  # Fallback para sistema legado
+    # Carregar prompt formatado
+    prompt = load_prompt_text(text)
     
-    # Se não usar prompt_template, usar sistema JSON legado
-    if not prompt_template:
-        cfg = _load_prompt_config()
-        parametros = cfg.get("parametros", {}) if cfg else {}
-        
-        # Determinar modelo (prioridade: argumento > JSON > .env > padrão)
-        if model is None:
-            model = parametros.get("modelo_openrouter") or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-        
-        # Construir prompt usando configuração unificada
-        prompt = _build_prompt_from_config(cfg, text, blocks, use_blocks)
-        
-        # Obter parâmetros (prioridade: JSON > .env > padrão)
-        temperatura = parametros.get("temperatura") or float(os.getenv("OPENROUTER_TEMPERATURE", "0.3"))
-        max_tokens = parametros.get("max_tokens") or int(os.getenv("OPENROUTER_MAX_TOKENS", "4096"))
-        timeout = parametros.get("timeout") or int(os.getenv("OPENROUTER_TIMEOUT", "60"))
-    else:
-        # Usar valores padrão quando usar prompt_template
-        if model is None:
-            model = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-        temperatura = float(os.getenv("OPENROUTER_TEMPERATURE", "0.3"))
-        max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "4096"))
-        timeout = int(os.getenv("OPENROUTER_TIMEOUT", "60"))
+    # Configurar modelo e parâmetros
+    if model is None:
+        model = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-exp:free")
+    
+    temperatura = float(os.getenv("OPENROUTER_TEMPERATURE", "0.3"))
+    max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "4096"))
+    timeout = int(os.getenv("OPENROUTER_TIMEOUT", "60"))
     
     # Preparar requisição
     headers = {
@@ -202,10 +169,10 @@ def summarize_with_openrouter(
         # Parse JSON da resposta
         try:
             # Usar mesma função de parse do gemini_client
-            # Detectar modelo e usar parser apropriado
-            prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
+            # Detectar template e usar parser apropriado
+            template_name = get_prompt_template_name()
             
-            if prompt_model in ["modelo4", "model4", "4", "hibrido", "hybrid"]:
+            if template_name in ["modelo4", "modelo5"]:
                 from .gemini_client import parse_modelo4_response
                 data = parse_modelo4_response(raw_text)
             else:
@@ -450,35 +417,24 @@ def get_fallback_models() -> List[str]:
     Returns:
         Lista de IDs de modelos
     """
-    cfg = _load_prompt_config()
+    # Detectar se é prompt complexo (modelo4 ou modelo5)
+    template_name = get_prompt_template_name()
+    is_complex_prompt = template_name in ["modelo4", "modelo5"]
     
-    # Detectar se é prompt complexo (modelo4 ou modelo3)
-    prompt_model = os.getenv("PROMPT_MODEL", "modelo2").lower()
-    is_complex_prompt = prompt_model in ["modelo4", "modelo3", "modelo_4", "modelo_3"]
+    # Se é prompt complexo, usar modelos premium primeiro
+    if is_complex_prompt:
+        print(f"[INFO] Prompt complexo ({template_name}) detectado - usando modelos premium")
+        return [
+            # Modelos premium para prompts complexos
+            "anthropic/claude-3.5-sonnet",
+            "openai/gpt-4o",
+            "google/gemini-2.5-pro",
+            # Fallback gratuitos
+            "google/gemini-2.0-flash-exp:free",
+            "meta-llama/llama-3.3-70b-instruct:free",
+        ]
     
-    # Verificar se deve usar premium automaticamente para prompts complexos
-    if cfg and cfg.get("parametros"):
-        params = cfg["parametros"]
-        usar_premium = params.get("usar_premium_automaticamente", False)
-        
-        # Se é prompt complexo E deve usar premium automaticamente
-        if is_complex_prompt and usar_premium:
-            modelos_premium = params.get("modelos_fallback_premium")
-            if isinstance(modelos_premium, list) and len(modelos_premium) > 0:
-                print(f"[INFO] Prompt complexo ({prompt_model}) detectado - usando modelos premium")
-                return modelos_premium
-        
-        # Fallback normal: modelos_fallback do JSON
-        modelos_json = params.get("modelos_fallback")
-        if isinstance(modelos_json, list) and len(modelos_json) > 0:
-            return modelos_json
-    
-    # 2. Fallback: Configuração do .env
-    custom_models = os.getenv("OPENROUTER_FALLBACK_MODELS", "")
-    if custom_models:
-        return [m.strip() for m in custom_models.split(",") if m.strip()]
-    
-    # 3. Lista padrão: gratuitos primeiro, depois pagos
+    # Lista padrão: gratuitos primeiro, depois pagos
     return [
         # Tier 1: Gratuitos de alta qualidade
         "google/gemini-2.0-flash-exp:free",

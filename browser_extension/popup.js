@@ -187,6 +187,12 @@ function loadManifests() {
                 });
             });
 
+            // Reaplicar estado dos botões baseado no prompt selecionado
+            const selector = document.getElementById('promptModelSelect');
+            if (selector && selector.value) {
+                updateProcessButtonStateExtension(selector.value);
+            }
+
             // Event listeners para botões de recarregar página
             document.querySelectorAll('.reload-page-btn').forEach(btn => {
                 btn.addEventListener('click', function () {
@@ -286,6 +292,9 @@ function formatTime(timestamp) {
 
 // Carregar prompts disponíveis da API
 // Carregar prompts disponíveis da API via Background (evita Mixed Content)
+// Variável global para rastrear prompts disponíveis
+let availablePromptsData = [];
+
 async function loadPrompts() {
     const selector = document.getElementById('promptModelSelect');
 
@@ -296,22 +305,37 @@ async function loadPrompts() {
     chrome.runtime.sendMessage({ action: 'getPrompts' }, (response) => {
         if (response && response.success && response.prompts) {
             const prompts = response.prompts;
+            availablePromptsData = prompts; // Guardar para uso posterior
+
+            const defaultTemplate = response.default_template || 'modelo2';
+            const defaultValid = response.default_valid;
 
             if (prompts.length === 0) {
                 selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
                 return;
             }
 
-            // Popular dropdown
+            // Popular dropdown - permitir selecionar todos
             selector.innerHTML = '';
+            let selectedValue = null;
+
             prompts.forEach(prompt => {
                 const option = document.createElement('option');
                 option.value = prompt.name;
                 const icon = prompt.valid ? '✅' : '❌';
                 option.textContent = `${icon} ${prompt.name}`;
-                option.disabled = !prompt.valid;
-                if (savedPrompt === prompt.name || (!savedPrompt && prompt.valid)) {
+                option.disabled = false; // Permitir selecionar todos
+
+                // Prioridade: salvo > padrão válido > primeiro válido
+                if (savedPrompt === prompt.name) {
                     option.selected = true;
+                    selectedValue = prompt.name;
+                } else if (!selectedValue && defaultValid && prompt.name === defaultTemplate) {
+                    option.selected = true;
+                    selectedValue = prompt.name;
+                } else if (!selectedValue && prompt.valid) {
+                    option.selected = true;
+                    selectedValue = prompt.name;
                 }
                 selector.appendChild(option);
             });
@@ -321,16 +345,49 @@ async function loadPrompts() {
                 const selected = selector.value;
                 await chrome.storage.local.set({ selectedPrompt: selected });
                 updatePromptInfo(selected);
+                updateProcessButtonStateExtension(selected);
             };
 
-            // Mostrar info inicial
+            // Mostrar info inicial e verificar estado do botão
             updatePromptInfo(selector.value);
+            updateProcessButtonStateExtension(selector.value);
 
         } else {
             console.error('Erro ao carregar prompts:', response?.error);
             selector.innerHTML = '<option value="">❌ Erro de conexão</option>';
         }
     });
+}
+
+// Atualizar estado do botão de processamento na extensão
+function updateProcessButtonStateExtension(promptName) {
+    // Buscar todos os botões de processar (criados dinamicamente)
+    const processButtons = document.querySelectorAll('.process-btn');
+    const promptInfo = document.getElementById('promptInfo');
+
+    const prompt = availablePromptsData.find(p => p.name === promptName);
+
+    if (!prompt) return;
+
+    // Aplicar estado a todos os botões de processar
+    processButtons.forEach(btn => {
+        if (prompt.valid) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.title = 'Processar vídeo capturado';
+        } else {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+            btn.title = `Prompt "${prompt.name}" é inválido - selecione um prompt válido`;
+        }
+    });
+
+    // Mostrar info automaticamente quando inválido
+    if (!prompt.valid && promptInfo) {
+        promptInfo.style.display = 'block';
+    }
 }
 
 // Atualizar informações do prompt selecionado
@@ -511,52 +568,67 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadPrompts();
 
 
+
     // Refresh button - força nova captura da aba ativa
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', function () {
             const originalText = refreshBtn.innerHTML;
-            refreshBtn.innerHTML = '⏳ Capturando...';
+            refreshBtn.innerHTML = '⏳ Verificando...';
             refreshBtn.disabled = true;
 
-            // Timeout de 10 segundos
-            const timeout = setTimeout(() => {
-                refreshBtn.innerHTML = '⏱️ Timeout';
-                setTimeout(() => {
-                    refreshBtn.innerHTML = originalText;
-                    refreshBtn.disabled = false;
-                }, 2000);
-            }, 10000);
+            // Primeiro verificar se já existe manifest para esta aba
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                const currentTabUrl = tabs[0]?.url || '';
 
-            // Solicitar ao background para forçar nova captura
-            chrome.runtime.sendMessage({ action: 'forceRecapture' }, (response) => {
-                clearTimeout(timeout);
+                chrome.runtime.sendMessage({ action: 'getManifests' }, (manifestResponse) => {
+                    const manifests = manifestResponse?.manifests || [];
+                    const existingManifest = manifests.find(m => m.pageUrl === currentTabUrl);
 
-                if (chrome.runtime.lastError) {
-                    console.error('[Popup] Erro ao enviar mensagem:', chrome.runtime.lastError);
-                    refreshBtn.innerHTML = '❌ Erro';
-                    setTimeout(() => {
+                    // Se já tem manifest com manifestUrl, apenas atualiza metadados
+                    if (existingManifest && existingManifest.manifestUrl) {
+                        refreshBtn.innerHTML = '⏳ Atualizando...';
+
+                        chrome.runtime.sendMessage({ action: 'forceRecapture' }, (response) => {
+                            if (response && response.success) {
+                                refreshBtn.innerHTML = '✅ Atualizado!';
+                                setTimeout(() => {
+                                    loadManifests();
+                                    refreshBtn.innerHTML = originalText;
+                                    refreshBtn.disabled = false;
+                                }, 1000);
+                            } else {
+                                refreshBtn.innerHTML = originalText;
+                                refreshBtn.disabled = false;
+                            }
+                        });
+                    } else {
+                        // Não tem manifest ou não tem manifestUrl - perguntar antes de recarregar
                         refreshBtn.innerHTML = originalText;
                         refreshBtn.disabled = false;
-                    }, 2000);
-                    return;
-                }
 
-                if (response && response.success) {
-                    refreshBtn.innerHTML = '✅ Capturado!';
-                    setTimeout(() => {
-                        loadManifests();
-                        refreshBtn.innerHTML = originalText;
-                        refreshBtn.disabled = false;
-                    }, 1000);
-                } else {
-                    refreshBtn.innerHTML = '❌ Erro';
-                    console.error('[Popup] Erro na resposta:', response);
-                    setTimeout(() => {
-                        refreshBtn.innerHTML = originalText;
-                        refreshBtn.disabled = false;
-                    }, 2000);
-                }
+                        if (tabs[0]) {
+                            const tabId = tabs[0].id;
+
+                            // Mostrar modal informativo ANTES de recarregar
+                            showInfoModal(
+                                '🔄 Recarregar Página?',
+                                '📌 Para capturar o vídeo, a página precisa ser recarregada. Após recarregar, aguarde o vídeo carregar e clique no ícone da extensão novamente.',
+                                () => {
+                                    // Recarregar página e fechar popup
+                                    chrome.tabs.reload(tabId);
+                                    window.close();
+                                }
+                            );
+                        } else {
+                            refreshBtn.innerHTML = '❌ Erro';
+                            setTimeout(() => {
+                                refreshBtn.innerHTML = originalText;
+                                refreshBtn.disabled = false;
+                            }, 2000);
+                        }
+                    }
+                });
             });
         });
     }
@@ -660,3 +732,237 @@ function showInfoModal(title, message, onOk) {
     modal.addEventListener('click', handleOverlayClick);
 }
 
+// ============================================
+// FUNÇÕES DE CONFIGURAÇÕES
+// ============================================
+
+// Carregar configurações da API
+async function loadSettingsFromApi() {
+    // Valores padrão
+    const defaults = {
+        ia_provider: 'gemini',
+        use_fallback: true,
+        whisper_model: 'small',
+        whisper_device: 'cpu'
+    };
+
+    // Aplicar padrões imediatamente
+    document.getElementById('settings-ia-provider').value = defaults.ia_provider;
+    document.getElementById('settings-fallback').checked = defaults.use_fallback;
+    document.getElementById('settings-whisper-model').value = defaults.whisper_model;
+    document.getElementById('settings-whisper-device').value = defaults.whisper_device;
+
+    try {
+        const response = await fetch('http://localhost:5000/api/settings');
+        if (response.ok) {
+            const data = await response.json();
+
+            // API Keys
+            if (data.gemini_api_key) {
+                document.getElementById('settings-gemini-key').value = data.gemini_api_key;
+                document.getElementById('gemini-key-status').innerHTML = '<span style="color: #22c55e; font-weight: bold;">✅ Configurada</span>';
+            } else {
+                document.getElementById('gemini-key-status').innerHTML = '<span style="color: #f59e0b;">⚠️ Não configurada</span>';
+            }
+
+            if (data.openrouter_api_key) {
+                document.getElementById('settings-openrouter-key').value = data.openrouter_api_key;
+                document.getElementById('openrouter-key-status').innerHTML = '<span style="color: #22c55e; font-weight: bold;">✅ Configurada</span>';
+            } else {
+                document.getElementById('openrouter-key-status').innerHTML = '<span style="color: #666;">Opcional - não configurada</span>';
+            }
+
+            // Sobrescrever padrões com valores do servidor
+            document.getElementById('settings-ia-provider').value = data.ia_provider || defaults.ia_provider;
+            document.getElementById('settings-fallback').checked = data.use_fallback !== false;
+            document.getElementById('settings-whisper-model').value = data.whisper_model || defaults.whisper_model;
+            document.getElementById('settings-whisper-device').value = data.whisper_device || defaults.whisper_device;
+        }
+    } catch (e) {
+        console.error('Erro ao carregar configurações:', e);
+        document.getElementById('gemini-key-status').innerHTML = '<span style="color: #ef4444;">❌ Erro ao carregar</span>';
+    }
+}
+
+// Salvar configurações via API
+async function saveSettings() {
+    const settings = {
+        gemini_api_key: document.getElementById('settings-gemini-key').value,
+        openrouter_api_key: document.getElementById('settings-openrouter-key').value,
+        ia_provider: document.getElementById('settings-ia-provider').value,
+        use_fallback: document.getElementById('settings-fallback').checked,
+        whisper_model: document.getElementById('settings-whisper-model').value,
+        whisper_device: document.getElementById('settings-whisper-device').value,
+        // Manter valores padrão para campos não exibidos
+        openrouter_model: 'google/gemini-2.0-flash-exp:free',
+        prompt_model: 'modelo2',
+        sumarios_dir: 'sumarios',
+        cache_ttl: 72
+    };
+
+    try {
+        const response = await fetch('http://localhost:5000/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+
+        const toast = document.getElementById('settings-toast');
+        if (response.ok) {
+            toast.style.display = 'block';
+            toast.style.background = '#4ECDC4';
+            toast.style.color = '#2D3436';
+            toast.textContent = '✅ Configurações salvas!';
+        } else {
+            const err = await response.json();
+            toast.style.display = 'block';
+            toast.style.background = '#FF6B6B';
+            toast.style.color = 'white';
+            toast.textContent = '❌ Erro: ' + (err.error || 'Falha ao salvar');
+        }
+
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3000);
+    } catch (e) {
+        const toast = document.getElementById('settings-toast');
+        toast.style.display = 'block';
+        toast.style.background = '#FF6B6B';
+        toast.style.color = 'white';
+        toast.textContent = '❌ Erro de conexão';
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3000);
+    }
+}
+
+// Testar Gemini API Key
+async function testGeminiKey() {
+    const key = document.getElementById('settings-gemini-key').value;
+    const statusEl = document.getElementById('gemini-key-status');
+
+    if (!key) {
+        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Informe a chave</span>';
+        return;
+    }
+
+    statusEl.innerHTML = '<span style="color: #f59e0b;">⏳ Testando...</span>';
+
+    try {
+        const response = await fetch('http://localhost:5000/api/settings/test-gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: key })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            statusEl.innerHTML = '<span style="color: #22c55e;">✅ ' + data.message + '</span>';
+        } else {
+            statusEl.innerHTML = '<span style="color: #ef4444;">❌ ' + data.message + '</span>';
+        }
+    } catch (e) {
+        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Erro de conexão</span>';
+    }
+}
+
+// Testar OpenRouter API Key
+async function testOpenRouterKey() {
+    const key = document.getElementById('settings-openrouter-key').value;
+    const statusEl = document.getElementById('openrouter-key-status');
+
+    if (!key) {
+        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Informe a chave</span>';
+        return;
+    }
+
+    statusEl.innerHTML = '<span style="color: #f59e0b;">⏳ Testando...</span>';
+
+    try {
+        const response = await fetch('http://localhost:5000/api/settings/test-openrouter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: key })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            statusEl.innerHTML = '<span style="color: #22c55e;">✅ ' + data.message + '</span>';
+        } else {
+            statusEl.innerHTML = '<span style="color: #ef4444;">❌ ' + data.message + '</span>';
+        }
+    } catch (e) {
+        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Erro de conexão</span>';
+    }
+}
+
+// Flag para rastrear alterações nas configurações da extensão
+let extensionSettingsChanged = false;
+let currentActiveTab = 'capture';
+
+// Configurar listeners para detectar alterações nas configurações
+function setupExtensionSettingsChangeListeners() {
+    const settingsInputs = document.querySelectorAll('#tab-settings input, #tab-settings select, #tab-settings textarea');
+    settingsInputs.forEach(input => {
+        input.removeEventListener('change', markSettingsChanged);
+        input.removeEventListener('input', markSettingsChanged);
+        input.addEventListener('change', markSettingsChanged);
+        input.addEventListener('input', markSettingsChanged);
+    });
+}
+
+function markSettingsChanged() {
+    extensionSettingsChanged = true;
+}
+
+// Função para trocar de aba (usada após confirmação do modal)
+function switchToTab(tabName, tabElement) {
+    // Update active tab
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tabElement.classList.add('active');
+
+    // Show corresponding panel
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('tab-' + tabName);
+    if (panel) panel.classList.add('active');
+
+    currentActiveTab = tabName;
+
+    // Load settings when tab is opened
+    if (tabName === 'settings') {
+        loadSettingsFromApi();
+        extensionSettingsChanged = false;
+        setTimeout(setupExtensionSettingsChangeListeners, 500);
+    }
+}
+
+// Inicializar tabs (incluindo settings)
+document.addEventListener('DOMContentLoaded', () => {
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', function () {
+            const tabName = this.getAttribute('data-tab');
+            const targetTab = this;
+
+            // Se estiver saindo da aba de settings com alterações, mostrar modal
+            if (currentActiveTab === 'settings' && tabName !== 'settings' && extensionSettingsChanged) {
+                showConfirmModal('⚠️ Você tem alterações não salvas nas configurações.\n\nDeseja sair sem salvar?', () => {
+                    extensionSettingsChanged = false;
+                    switchToTab(tabName, targetTab);
+                });
+                return;
+            }
+
+            // Troca normal de aba
+            switchToTab(tabName, this);
+        });
+    });
+
+    // Avisar ao fechar popup com alterações não salvas
+    window.addEventListener('beforeunload', (e) => {
+        if (extensionSettingsChanged) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+});

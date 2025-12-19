@@ -140,9 +140,10 @@
             border-radius: 1rem;
             padding: 1rem;
             font-family: 'Space Grotesk', sans-serif;
-            font-size: 1.25rem;
+            font-size: 1rem;
             box-shadow: 4px 4px 0px 0px #2D3436;
             transition: all 0.2s;
+            color: #2D3436 !important;
         }
 
         .retro-input:focus {
@@ -150,6 +151,11 @@
             background: white;
             transform: translate(-2px, -2px);
             box-shadow: 6px 6px 0px 0px #FF6B6B;
+        }
+
+        .retro-input::placeholder {
+            color: #999;
+            opacity: 1;
         }
 
         /* Scrollbar */
@@ -183,6 +189,9 @@
                 VIDEO<br><span class="text-accent">PROCESSOR</span>
             </h1>
         </div>
+        <button onclick="openSettingsModal()" class="btn-retro btn-secondary text-sm" title="Configurações">
+            ⚙️ CONFIGURAÇÕES
+        </button>
     </header>
 
     <main class="w-full max-w-4xl space-y-12">
@@ -250,6 +259,11 @@
                     <div id="prompt-info" class="hidden text-xs bg-base border-2 border-ink rounded p-2">
                         <div id="prompt-description" class="text-ink"></div>
                         <div id="prompt-validation-details" class="mt-1 text-xs"></div>
+                    </div>
+
+                    <!-- Aviso de prompt inválido -->
+                    <div id="invalid-prompt-warning"
+                        class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-4 text-sm">
                     </div>
 
                     <div class="flex gap-4">
@@ -437,6 +451,201 @@
     </div>
 
     <div id="toast-container" class="fixed bottom-8 right-8 z-50 flex flex-col gap-3"></div>
+
+    <!-- MODAL DE CONFIGURAÇÕES -->
+    <div id="settings-modal" class="fixed inset-0 bg-ink/90 hidden items-center justify-center z-50">
+        <div class="bg-base border-4 border-ink rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-retro">
+            <div class="p-4 border-b-4 border-ink flex justify-between items-center bg-sun sticky top-0">
+                <h3 class="font-display font-black text-xl">⚙️ CONFIGURAÇÕES</h3>
+                <button onclick="closeSettingsModal()"
+                    class="w-8 h-8 border-2 border-ink bg-white hover:bg-red-500 hover:text-white font-bold rounded flex items-center justify-center">X</button>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <!-- Seção: Autenticação -->
+                <div class="mb-2">
+                    <h3 class="font-display font-black text-base text-gray-600 uppercase tracking-wide">🔒 Autenticação
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1">Configure as credenciais para acessar plataformas de cursos e
+                        APIs de IA</p>
+                </div>
+
+                <!-- Credenciais por Domínio -->
+                <div class="bg-white border-2 border-ink rounded-xl p-4 shadow-retro">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="font-display font-bold text-lg">🔐 CREDENCIAIS POR DOMÍNIO</h4>
+                        <button onclick="addCredential()" class="btn-retro btn-tertiary text-xs px-2 py-1">
+                            ➕ Adicionar
+                        </button>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+                        💡 <strong>Para que serve:</strong> Login automático em plataformas de cursos (Hub.la, Hotmart,
+                        etc) para acessar vídeos protegidos por autenticação.
+                    </div>
+                    <div id="credentials-list" class="space-y-3">
+                        <!-- Lista dinâmica de credenciais -->
+                    </div>
+                </div>
+
+                <!-- API Keys -->
+                <div class="bg-white border-2 border-ink rounded-xl p-4 shadow-retro">
+                    <h4 class="font-display font-bold text-lg mb-2">🔑 CHAVES DE API</h4>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+                        💡 <strong>Para que serve:</strong> Autenticação com serviços de IA que geram os resumos dos
+                        vídeos. Obtenha sua chave em <a href="https://aistudio.google.com/apikey" target="_blank"
+                            class="underline font-bold">Google AI Studio</a>.
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block font-bold text-sm mb-1">GEMINI API KEY</label>
+                            <p class="text-xs text-gray-500 mb-2">Chave da API do Google Gemini - principal IA usada
+                                para gerar resumos</p>
+                            <div class="flex gap-2">
+                                <input type="password" id="cfg-gemini-key" class="retro-input flex-1 p-2"
+                                    placeholder="AIzaSy...">
+                                <button onclick="testGeminiApi()" class="btn-retro btn-tertiary text-sm">TESTAR</button>
+                            </div>
+                            <div id="cfg-gemini-status" class="text-sm mt-2"></div>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-sm mb-1">OPENROUTER API KEY <span
+                                    class="font-normal text-gray-500">(opcional)</span></label>
+                            <p class="text-xs text-gray-500 mb-2">Alternativa ao Gemini - usado como fallback ou
+                                provedor principal se preferir</p>
+                            <div class="flex gap-2">
+                                <input type="password" id="cfg-openrouter-key" class="retro-input flex-1 p-2"
+                                    placeholder="sk-or-v1-...">
+                                <button onclick="testOpenRouterApi()"
+                                    class="btn-retro btn-tertiary text-sm">TESTAR</button>
+                            </div>
+                            <div id="cfg-openrouter-status" class="text-sm mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seção: Processamento -->
+                <div class="mb-2 mt-8">
+                    <h3 class="font-display font-black text-base text-gray-600 uppercase tracking-wide">🤖 Processamento
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1">Configure como o áudio é transcrito e os resumos são gerados
+                    </p>
+                </div>
+
+                <!-- Modelo IA -->
+                <div class="bg-white border-2 border-ink rounded-xl p-4 shadow-retro">
+                    <h4 class="font-display font-bold text-lg mb-2">⚡ PROVEDOR DE IA</h4>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+                        💡 <strong>Para que serve:</strong> Define qual serviço de IA irá processar a transcrição e
+                        gerar o resumo do vídeo.
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block font-bold text-sm mb-1">PROVEDOR PRINCIPAL</label>
+                            <p class="text-xs text-gray-500 mb-2">Gemini é mais rápido e recomendado • OpenRouter
+                                oferece mais opções de modelos</p>
+                            <select id="cfg-ia-provider" class="retro-input p-2">
+                                <option value="gemini">Gemini (Recomendado)</option>
+                                <option value="openrouter">OpenRouter</option>
+                                <option value="auto">Automático (fallback)</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-3 bg-amber-50 p-3 rounded-lg border-2 border-amber-300">
+                            <input type="checkbox" id="cfg-fallback" class="w-5 h-5" checked>
+                            <div>
+                                <label for="cfg-fallback" class="font-bold text-sm">Usar fallback automático</label>
+                                <p class="text-xs text-gray-600">Se o provedor principal falhar, tenta automaticamente o
+                                    outro</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modelo de Prompt -->
+                <div class="bg-white border-2 border-ink rounded-xl p-4 shadow-retro">
+                    <h4 class="font-display font-bold text-lg mb-2">📝 TEMPLATE DE RESUMO</h4>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+                        💡 <strong>Para que serve:</strong> Define o formato e estilo do resumo gerado. Cada modelo
+                        produz um tipo diferente de saída (notas de estudo, resumo executivo, etc).
+                    </div>
+                    <div>
+                        <label class="block font-bold text-sm mb-1">MODELO DE PROMPT</label>
+                        <p class="text-xs text-gray-500 mb-2">Templates disponíveis na pasta modelos_prompts/ do projeto
+                        </p>
+                        <select id="cfg-prompt-model" class="retro-input p-2">
+                            <option value="">Carregando prompts...</option>
+                        </select>
+                        <!-- Status do prompt selecionado -->
+                        <div id="cfg-prompt-status"></div>
+                    </div>
+                </div>
+
+                <!-- Whisper (IA para Transcrição) -->
+                <div class="bg-white border-2 border-ink rounded-xl p-4 shadow-retro">
+                    <h4 class="font-display font-bold text-lg mb-2">🎙️ WHISPER (Transcrição por IA)</h4>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+                        💡 <strong>Para que serve:</strong> Converte o áudio do vídeo em texto. Whisper é a IA da OpenAI
+                        especializada em transcrição de áudio.
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex flex-col">
+                            <label class="block font-bold text-sm mb-1">MODELO</label>
+                            <p class="text-xs text-gray-500 mb-2 min-h-[32px]">Maior modelo = melhor qualidade, mas mais
+                                lento</p>
+                            <select id="cfg-whisper-model" class="retro-input p-2 mt-auto">
+                                <option value="small">Small (500MB) - Rápido</option>
+                                <option value="medium">Medium (1.5GB) - Balanceado</option>
+                                <option value="large-v3">Large V3 (3GB) - Mais preciso</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col">
+                            <label class="block font-bold text-sm mb-1">DISPOSITIVO</label>
+                            <p class="text-xs text-gray-500 mb-2 min-h-[32px]">GPU é muito mais rápido se disponível</p>
+                            <select id="cfg-whisper-device" class="retro-input p-2 mt-auto">
+                                <option value="cpu">CPU (Compatível com todos)</option>
+                                <option value="cuda">GPU NVIDIA (CUDA) - 10x mais rápido</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seção: Sistema -->
+                <div class="mb-2 mt-8">
+                    <h3 class="font-display font-black text-base text-gray-600 uppercase tracking-wide">💾 Sistema</h3>
+                    <p class="text-xs text-gray-400 mt-1">Configurações de armazenamento e cache</p>
+                </div>
+
+                <!-- Armazenamento e Cache -->
+                <div class="bg-white border-2 border-ink rounded-xl p-4 shadow-retro">
+                    <h4 class="font-display font-bold text-lg mb-2">📁 ARMAZENAMENTO E CACHE</h4>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+                        💡 <strong>Para que serve:</strong> Define onde os relatórios são salvos e por quanto tempo os
+                        dados ficam em cache.
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex flex-col">
+                            <label class="block font-bold text-sm mb-1">PASTA DE SUMÁRIOS</label>
+                            <p class="text-xs text-gray-500 mb-2 min-h-[32px]">Diretório onde os relatórios HTML são
+                                salvos</p>
+                            <input type="text" id="cfg-sumarios-dir" class="retro-input p-2 mt-auto"
+                                placeholder="sumarios">
+                        </div>
+                        <div class="flex flex-col">
+                            <label class="block font-bold text-sm mb-1">CACHE TTL (HORAS)</label>
+                            <p class="text-xs text-gray-500 mb-2 min-h-[32px]">Tempo para manter transcrições em cache
+                                (evita reprocessar)</p>
+                            <input type="number" id="cfg-cache-ttl" class="retro-input p-2 mt-auto" placeholder="72"
+                                min="1" max="720">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botão Salvar -->
+                <button onclick="saveConfigSettings()" class="btn-retro btn-primary w-full justify-center text-lg py-3">
+                    💾 SALVAR CONFIGURAÇÕES
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script src="/static/js/templates.js?v=20251216"></script>
     <script src="/static/js/main_v2.js"></script>

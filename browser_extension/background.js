@@ -651,14 +651,18 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     // Proxy para buscar prompts da API (evita Mixed Content no popup iframe)
     (async () => {
       try {
-        let prompts = null;
+        let result = null;
         for (const host of API_HOSTS) {
           try {
             const response = await fetch(`${host}/prompts`, { cache: 'no-store' });
             if (response.ok) {
               const data = await response.json();
               if (data && data.prompts) {
-                prompts = data.prompts;
+                result = {
+                  prompts: data.prompts,
+                  default_template: data.default_template || 'modelo2',
+                  default_valid: data.default_valid || false
+                };
                 break;
               }
             }
@@ -667,8 +671,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
           }
         }
 
-        if (prompts) {
-          sendResponse({ success: true, prompts: prompts });
+        if (result) {
+          sendResponse({ success: true, ...result });
         } else {
           sendResponse({ success: false, error: 'Não foi possível carregar prompts' });
         }
@@ -738,13 +742,16 @@ function processMetadata(metadata, tab, pageUrl, sendResponse) {
   console.log('[Video Extractor] Resposta recebida:', metadata);
 
   if (metadata && metadata.success) {
-    // Criar novo manifest com metadados
+    // Verificar se já existe um manifest para esta URL (para preservar manifestUrl)
+    const existingManifest = getManifestByUrl(pageUrl);
+
+    // Criar/atualizar manifest com metadados, preservando manifestUrl existente
     const capture = {
       pageUrl: pageUrl,
-      manifestUrl: '', // Será preenchido quando detectar o manifest
-      timestamp: new Date().toISOString(),
+      manifestUrl: existingManifest?.manifestUrl || '', // Preservar manifestUrl existente!
+      timestamp: existingManifest?.timestamp || new Date().toISOString(),
       domain: new URL(pageUrl).hostname,
-      source: 'manual',
+      source: existingManifest?.source || 'manual',
       pageTitle: metadata.metadata.pageTitle || tab.title || '',
       videoTitle: metadata.metadata.videoTitle || '',
       supportMaterials: metadata.metadata.supportMaterials || []
@@ -753,7 +760,7 @@ function processMetadata(metadata, tab, pageUrl, sendResponse) {
     // Adicionar ou atualizar manifest no array
     addOrUpdateManifest(capture);
 
-    console.log('[Video Extractor] Captura manual realizada:', capture);
+    console.log('[Video Extractor] Metadados atualizados:', capture);
     sendResponse({ success: true, manifest: capture });
   } else {
     console.error('[Video Extractor] Metadados inválidos:', metadata);

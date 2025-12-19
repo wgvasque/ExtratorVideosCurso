@@ -45,6 +45,9 @@
       justify-content: space-between;
       align-items: center;
       border-bottom: 3px solid var(--ink);
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
 
     .header h1 {
@@ -106,6 +109,10 @@
       display: flex;
       border-bottom: 2px solid var(--ink);
       background: white;
+      position: sticky;
+      top: 51px;
+      /* Altura do header */
+      z-index: 99;
     }
 
     .tab {
@@ -710,6 +717,7 @@
   <div class="tabs" style="display: none;">
     <button class="tab active" data-tab="capture">📡 Captura</button>
     <button class="tab" data-tab="library">📚 Biblioteca</button>
+    <button class="tab" data-tab="settings">⚙️ Config</button>
   </div>
 
   <!-- API Connection Error (hidden by default) -->
@@ -746,8 +754,8 @@
     <!-- CAPTURE TAB -->
     <div id="tab-capture" class="tab-panel active">
 
-      <!-- Auto Process Toggle -->
-      <div class="toggle-container">
+      <!-- Auto Process Toggle (OCULTO - pode ser reativado no futuro) -->
+      <div class="toggle-container" style="display: none;">
         <input type="checkbox" id="autoProcessCheckbox">
         <label for="autoProcessCheckbox">🚀 <strong>Auto-processar</strong> ao capturar vídeo</label>
       </div>
@@ -820,6 +828,80 @@
           <div class="icon">📚</div>
           <p>Carregando relatórios...</p>
         </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="tab-settings" class="tab-panel">
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-title">🔑 Chaves de API</div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-size: 10px; font-weight: 600; margin-bottom: 4px;">GEMINI API KEY</label>
+          <div style="display: flex; gap: 6px;">
+            <input type="password" id="settings-gemini-key" placeholder="AIzaSy..."
+              style="flex: 1; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; font-size: 11px;">
+            <button class="btn btn-sun btn-sm" onclick="testGeminiKey()">Testar</button>
+          </div>
+          <div id="gemini-key-status" style="font-size: 9px; margin-top: 4px;"></div>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 10px; font-weight: 600; margin-bottom: 4px;">OPENROUTER API KEY <span
+              style="color: #999;">(opcional)</span></label>
+          <div style="display: flex; gap: 6px;">
+            <input type="password" id="settings-openrouter-key" placeholder="sk-or-v1-..."
+              style="flex: 1; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; font-size: 11px;">
+            <button class="btn btn-sun btn-sm" onclick="testOpenRouterKey()">Testar</button>
+          </div>
+          <div id="openrouter-key-status" style="font-size: 9px; margin-top: 4px;"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-title">🤖 Modelo de IA</div>
+        <select id="settings-ia-provider"
+          style="width: 100%; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; font-size: 11px; margin-bottom: 8px;">
+          <option value="gemini">Gemini (Recomendado)</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="auto">Automático (fallback)</option>
+        </select>
+
+        <div class="toggle-container" style="margin-bottom: 0;">
+          <input type="checkbox" id="settings-fallback" checked>
+          <label for="settings-fallback">Usar fallback automático</label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-title">🎤 Whisper</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div>
+            <label style="display: block; font-size: 9px; font-weight: 600; margin-bottom: 4px;">MODELO</label>
+            <select id="settings-whisper-model"
+              style="width: 100%; padding: 6px; border: 2px solid var(--ink); border-radius: 6px; font-size: 10px;">
+              <option value="small">Small (500MB)</option>
+              <option value="medium">Medium (1.5GB)</option>
+              <option value="large-v3">Large V3 (3GB)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display: block; font-size: 9px; font-weight: 600; margin-bottom: 4px;">DISPOSITIVO</label>
+            <select id="settings-whisper-device"
+              style="width: 100%; padding: 6px; border: 2px solid var(--ink); border-radius: 6px; font-size: 10px;">
+              <option value="cpu">CPU</option>
+              <option value="cuda">GPU (CUDA)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-full" onclick="saveSettings()" style="margin-top: 8px;">
+        💾 SALVAR CONFIGURAÇÕES
+      </button>
+
+      <div id="settings-toast"
+        style="display: none; margin-top: 12px; padding: 10px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 11px;">
       </div>
     </div>
   </div>

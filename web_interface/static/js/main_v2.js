@@ -36,22 +36,39 @@ async function loadAvailablePrompts() {
         const data = await response.json();
 
         availablePrompts = data.prompts;
+        const defaultTemplate = data.default_template || 'modelo2';
+        const defaultValid = data.default_valid;
+
         populatePromptSelector();
 
-        // Restaurar seleção do localStorage
+        // Restaurar seleção: localStorage > default_template > primeiro válido
         const savedPrompt = localStorage.getItem('selectedPrompt');
-        if (savedPrompt) {
-            const selector = document.getElementById('prompt-model-select');
-            if (selector) {
-                selector.value = savedPrompt;
-                await updatePromptInfo(savedPrompt);
-            }
-        } else if (availablePrompts.length > 0) {
-            // Selecionar primeiro prompt válido por padrão
+        let promptToUse = null;
+
+        if (savedPrompt && availablePrompts.find(p => p.name === savedPrompt && p.valid)) {
+            // Usar do localStorage se existir e for válido
+            promptToUse = savedPrompt;
+        } else if (defaultValid) {
+            // Usar o padrão do .env se for válido
+            promptToUse = defaultTemplate;
+        } else {
+            // Fallback para primeiro válido
             const firstValid = availablePrompts.find(p => p.valid);
             if (firstValid) {
-                document.getElementById('prompt-model-select').value = firstValid.name;
-                await updatePromptInfo(firstValid.name);
+                promptToUse = firstValid.name;
+            }
+
+            // Mostrar alerta se o padrão configurado não é válido
+            if (!defaultValid && defaultTemplate) {
+                showToast(`⚠️ Template padrão "${defaultTemplate}" está inválido. Usando "${promptToUse || 'nenhum'}" como alternativa.`, 'warning');
+            }
+        }
+
+        if (promptToUse) {
+            const selector = document.getElementById('prompt-model-select');
+            if (selector) {
+                selector.value = promptToUse;
+                await updatePromptInfo(promptToUse);
             }
         }
     } catch (error) {
@@ -80,7 +97,8 @@ function populatePromptSelector() {
         const sections = `(${prompt.sections}/14)`;
 
         option.textContent = `${icon} ${prompt.name} ${sections}`;
-        option.disabled = !prompt.valid;
+        // Permitir selecionar todos, inclusive inválidos
+        option.disabled = false;
 
         selector.appendChild(option);
     });
@@ -90,6 +108,15 @@ function populatePromptSelector() {
         const promptName = e.target.value;
         await updatePromptInfo(promptName);
         localStorage.setItem('selectedPrompt', promptName);
+
+        // Verificar se é válido e ajustar botão de processamento
+        const prompt = availablePrompts.find(p => p.name === promptName);
+        updateProcessButtonState(prompt);
+
+        // Se for inválido, abrir automaticamente o painel de info
+        if (prompt && !prompt.valid) {
+            togglePromptInfo();
+        }
     });
 }
 
@@ -149,6 +176,43 @@ async function updatePromptInfo(promptName) {
         }
     } catch (error) {
         console.error('Erro ao carregar detalhes do prompt:', error);
+    }
+}
+
+function updateProcessButtonState(prompt) {
+    // Atualizar estado do botão de processamento baseado na validade do prompt
+    const processBtn = document.getElementById('btn-process');
+    const invalidWarning = document.getElementById('invalid-prompt-warning');
+
+    if (!prompt) return;
+
+    if (processBtn) {
+        if (prompt.valid) {
+            processBtn.disabled = false;
+            processBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            processBtn.title = 'Processar vídeos';
+        } else {
+            processBtn.disabled = true;
+            processBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            processBtn.title = `Prompt "${prompt.name}" é inválido - selecione um prompt válido`;
+        }
+    }
+
+    // Mostrar/ocultar aviso de prompt inválido
+    if (invalidWarning) {
+        if (prompt.valid) {
+            invalidWarning.classList.add('hidden');
+        } else {
+            invalidWarning.classList.remove('hidden');
+            invalidWarning.textContent = `⚠️ Prompt "${prompt.name}" é inválido. Selecione um prompt válido para processar.`;
+        }
+    }
+}
+
+function togglePromptInfo() {
+    const infoDiv = document.getElementById('prompt-info');
+    if (infoDiv) {
+        infoDiv.classList.remove('hidden');
     }
 }
 
@@ -1066,3 +1130,438 @@ function closeWhatsNew() {
     }
 }
 
+// ============================================
+// MODAL DE CONFIGURAÇÕES 
+// ============================================
+
+function openSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+        loadConfigSettings();
+
+        // Resetar flag de alterações e adicionar listeners
+        settingsChanged = false;
+        setupSettingsChangeListeners();
+    }
+}
+
+// Flag para rastrear se configurações foram alteradas
+let settingsChanged = false;
+
+// Configurar listeners para detectar alterações
+function setupSettingsChangeListeners() {
+    const settingsInputs = document.querySelectorAll('#settings-modal input, #settings-modal select, #settings-modal textarea');
+    settingsInputs.forEach(input => {
+        input.addEventListener('change', () => { settingsChanged = true; });
+        input.addEventListener('input', () => { settingsChanged = true; });
+    });
+}
+
+// Modal de confirmação customizado para a web
+function showConfirmDialog(title, message, onConfirm, onCancel) {
+    // Criar overlay do modal
+    const overlay = document.createElement('div');
+    overlay.id = 'confirm-dialog-overlay';
+    overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]';
+
+    overlay.innerHTML = `
+        <div class="bg-white border-4 border-ink rounded-2xl p-6 max-w-md mx-4 shadow-retro transform scale-100">
+            <h3 class="font-display font-bold text-xl mb-3">${title}</h3>
+            <p class="text-ink mb-6 whitespace-pre-line">${message}</p>
+            <div class="flex gap-3 justify-end">
+                <button id="confirm-dialog-cancel" class="btn-retro btn-secondary px-4 py-2">Não</button>
+                <button id="confirm-dialog-ok" class="btn-retro btn-primary px-4 py-2">Sim</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const handleConfirm = () => {
+        overlay.remove();
+        if (onConfirm) onConfirm();
+    };
+
+    const handleCancel = () => {
+        overlay.remove();
+        if (onCancel) onCancel();
+    };
+
+    document.getElementById('confirm-dialog-ok').addEventListener('click', handleConfirm);
+    document.getElementById('confirm-dialog-cancel').addEventListener('click', handleCancel);
+
+    // Fechar ao clicar fora
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) handleCancel();
+    });
+}
+
+function closeSettingsModal(forceClose = false) {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        // Verificar se há alterações não salvas
+        if (settingsChanged && !forceClose) {
+            showConfirmDialog(
+                '⚠️ Alterações não salvas',
+                'Você tem alterações não salvas nas configurações.\n\nDeseja salvar antes de fechar?',
+                () => {
+                    // Usuário quer salvar
+                    saveConfigSettings();
+                },
+                () => {
+                    // Usuário não quer salvar - fechar sem salvar
+                    settingsChanged = false;
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                    document.body.style.overflow = '';
+                }
+            );
+            return;
+        }
+
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = '';
+        settingsChanged = false; // Resetar flag
+    }
+}
+
+async function populateConfigPromptSelector(currentValue) {
+    // Popular o select de prompts nas configurações - mostra todos (válidos e inválidos)
+    const selector = document.getElementById('cfg-prompt-model');
+    const statusDiv = document.getElementById('cfg-prompt-status');
+    if (!selector) return;
+
+    try {
+        const response = await fetch('/prompts');
+        const data = await response.json();
+
+        selector.innerHTML = '';
+
+        if (data.prompts.length === 0) {
+            selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
+            return;
+        }
+
+        // Mostrar TODOS os prompts (válidos e inválidos) como na tela principal
+        data.prompts.forEach(prompt => {
+            const option = document.createElement('option');
+            option.value = prompt.name;
+
+            // Ícone de status igual à tela principal
+            const icon = prompt.valid ? '✅' : '❌';
+            const sections = `(${prompt.sections}/14 seções)`;
+
+            option.textContent = `${icon} ${prompt.name} ${sections}`;
+            selector.appendChild(option);
+        });
+
+        // Event listener para mostrar aviso quando selecionar inválido
+        selector.addEventListener('change', () => {
+            const selectedName = selector.value;
+            const selectedPrompt = data.prompts.find(p => p.name === selectedName);
+            updateConfigPromptStatus(selectedPrompt, statusDiv);
+        });
+
+        // Definir valor atual
+        if (currentValue && data.prompts.find(p => p.name === currentValue)) {
+            selector.value = currentValue;
+        } else if (data.prompts.length > 0) {
+            // Selecionar primeiro válido ou primeiro disponível
+            const firstValid = data.prompts.find(p => p.valid);
+            selector.value = firstValid ? firstValid.name : data.prompts[0].name;
+        }
+
+        // Mostrar status inicial
+        const initialPrompt = data.prompts.find(p => p.name === selector.value);
+        updateConfigPromptStatus(initialPrompt, statusDiv);
+
+    } catch (e) {
+        console.error('Erro ao carregar prompts para config:', e);
+        selector.innerHTML = '<option value="modelo2">modelo2</option>';
+    }
+}
+
+// Função para atualizar status do prompt selecionado nas configurações
+function updateConfigPromptStatus(prompt, statusDiv) {
+    if (!statusDiv) return;
+
+    if (!prompt) {
+        statusDiv.innerHTML = '';
+        return;
+    }
+
+    if (prompt.valid) {
+        statusDiv.innerHTML = `
+            <div class="bg-green-50 border border-green-300 rounded-lg p-2 mt-2 text-xs text-green-700">
+                ✅ <strong>Prompt válido</strong> - ${prompt.sections}/14 seções configuradas
+            </div>`;
+    } else {
+        statusDiv.innerHTML = `
+            <div class="bg-red-50 border border-red-300 rounded-lg p-2 mt-2 text-xs text-red-700">
+                ❌ <strong>Prompt inválido</strong> - Apenas ${prompt.sections}/14 seções. 
+                Este prompt não funcionará corretamente para processamento.
+            </div>`;
+    }
+}
+
+async function loadConfigSettings() {
+    // Valores padrão
+    const defaults = {
+        ia_provider: 'gemini',
+        use_fallback: true,
+        whisper_model: 'small',
+        whisper_device: 'cpu'
+    };
+
+    // Aplicar padrões imediatamente
+    document.getElementById('cfg-ia-provider').value = defaults.ia_provider;
+    document.getElementById('cfg-fallback').checked = defaults.use_fallback;
+    document.getElementById('cfg-whisper-model').value = defaults.whisper_model;
+    document.getElementById('cfg-whisper-device').value = defaults.whisper_device;
+
+    try {
+        const response = await fetch('/api/settings');
+        if (response.ok) {
+            const data = await response.json();
+
+            // API Keys
+            if (data.gemini_api_key) {
+                document.getElementById('cfg-gemini-key').value = data.gemini_api_key;
+                document.getElementById('cfg-gemini-status').innerHTML = '<span class="text-green-600 font-bold">✅ Configurada</span>';
+            } else {
+                document.getElementById('cfg-gemini-status').innerHTML = '<span class="text-amber-600">⚠️ Não configurada</span>';
+            }
+
+            if (data.openrouter_api_key) {
+                document.getElementById('cfg-openrouter-key').value = data.openrouter_api_key;
+                document.getElementById('cfg-openrouter-status').innerHTML = '<span class="text-green-600 font-bold">✅ Configurada</span>';
+            } else {
+                document.getElementById('cfg-openrouter-status').innerHTML = '<span class="text-gray-500">Opcional - não configurada</span>';
+            }
+
+            // Sobrescrever padrões com valores do servidor
+            document.getElementById('cfg-ia-provider').value = data.ia_provider || defaults.ia_provider;
+            document.getElementById('cfg-fallback').checked = data.use_fallback !== false;
+            document.getElementById('cfg-whisper-model').value = data.whisper_model || defaults.whisper_model;
+            document.getElementById('cfg-whisper-device').value = data.whisper_device || defaults.whisper_device;
+
+            // Popular select de prompts e definir valor atual
+            await populateConfigPromptSelector(data.prompt_model || 'modelo2');
+
+            // Campos restantes
+            document.getElementById('cfg-sumarios-dir').value = data.sumarios_dir || 'sumarios';
+            document.getElementById('cfg-cache-ttl').value = data.cache_ttl || 72;
+        }
+
+        // Carregar credenciais por domínio separadamente
+        await loadCredentials();
+
+    } catch (e) {
+        console.error('Erro ao carregar configurações:', e);
+        document.getElementById('cfg-gemini-status').innerHTML = '<span class="text-red-600">❌ Erro ao carregar</span>';
+    }
+}
+
+async function saveConfigSettings() {
+    const settings = {
+        gemini_api_key: document.getElementById('cfg-gemini-key').value,
+        openrouter_api_key: document.getElementById('cfg-openrouter-key').value,
+        ia_provider: document.getElementById('cfg-ia-provider').value,
+        use_fallback: document.getElementById('cfg-fallback').checked,
+        whisper_model: document.getElementById('cfg-whisper-model').value,
+        whisper_device: document.getElementById('cfg-whisper-device').value,
+        openrouter_model: 'google/gemini-2.0-flash-exp:free',
+        prompt_model: document.getElementById('cfg-prompt-model').value,
+        sumarios_dir: document.getElementById('cfg-sumarios-dir').value,
+        cache_ttl: parseInt(document.getElementById('cfg-cache-ttl').value) || 72
+    };
+
+    try {
+        // Salvar configurações gerais
+        const response = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+
+        // Salvar credenciais por domínio
+        await saveCredentials();
+
+        if (response.ok) {
+            showToast('Configurações salvas!', 'success');
+            settingsChanged = false; // Resetar flag antes de fechar
+            closeSettingsModal(true); // Forçar fechamento
+        } else {
+            const err = await response.json();
+            showToast('Erro: ' + (err.error || 'Falha ao salvar'), 'error');
+        }
+    } catch (e) {
+        showToast('Erro de conexão', 'error');
+    }
+}
+
+// ============================================
+// CREDENCIAIS POR DOMÍNIO
+// ============================================
+let credentialsData = {};
+
+async function loadCredentials() {
+    try {
+        const response = await fetch('/api/credentials');
+        if (response.ok) {
+            credentialsData = await response.json();
+            renderCredentialsList();
+        }
+    } catch (e) {
+        console.error('Erro ao carregar credenciais:', e);
+    }
+}
+
+function renderCredentialsList() {
+    const container = document.getElementById('credentials-list');
+    if (!container) return;
+
+    const domains = Object.keys(credentialsData);
+
+    if (domains.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-gray-400 py-4 text-sm">
+                Nenhuma credencial configurada.<br>
+                Clique em "➕ Adicionar" para começar.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = domains.map((domain, index) => `
+        <div class="border-2 border-gray-200 rounded-lg p-3 bg-gray-50" data-domain="${domain}">
+            <div class="flex justify-between items-center mb-2">
+                <input type="text" value="${domain}" 
+                    class="retro-input p-1 text-sm flex-1 mr-2 font-mono"
+                    placeholder="dominio.com.br"
+                    onchange="updateCredentialDomain(${index}, this.value)">
+                <button onclick="removeCredential('${domain}')" 
+                    class="text-red-500 hover:text-red-700 font-bold px-2">✕</button>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <input type="email" value="${credentialsData[domain].email || ''}" 
+                    class="retro-input p-1 text-sm"
+                    placeholder="email@exemplo.com"
+                    onchange="credentialsData['${domain}'].email = this.value">
+                <input type="password" value="${credentialsData[domain].senha || ''}" 
+                    class="retro-input p-1 text-sm"
+                    placeholder="Senha"
+                    onchange="credentialsData['${domain}'].senha = this.value">
+            </div>
+        </div>
+    `).join('');
+}
+
+function addCredential() {
+    const domain = prompt('Digite o domínio da plataforma (ex: alunos.segueadii.com.br):');
+    if (domain && domain.trim()) {
+        credentialsData[domain.trim()] = { email: '', senha: '' };
+        renderCredentialsList();
+    }
+}
+
+function removeCredential(domain) {
+    if (confirm(`Remover credenciais de "${domain}"?`)) {
+        delete credentialsData[domain];
+        renderCredentialsList();
+    }
+}
+
+function updateCredentialDomain(index, newDomain) {
+    const domains = Object.keys(credentialsData);
+    const oldDomain = domains[index];
+    if (oldDomain && newDomain && oldDomain !== newDomain) {
+        credentialsData[newDomain] = credentialsData[oldDomain];
+        delete credentialsData[oldDomain];
+        renderCredentialsList();
+    }
+}
+
+async function saveCredentials() {
+    try {
+        await fetch('/api/credentials', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(credentialsData)
+        });
+    } catch (e) {
+        console.error('Erro ao salvar credenciais:', e);
+    }
+}
+
+async function testGeminiApi() {
+    const key = document.getElementById('cfg-gemini-key').value;
+    const statusEl = document.getElementById('cfg-gemini-status');
+
+    if (!key) {
+        statusEl.innerHTML = '<span class="text-red-600">❌ Informe a chave</span>';
+        return;
+    }
+
+    statusEl.innerHTML = '<span class="text-yellow-600">⏳ Testando...</span>';
+
+    try {
+        const response = await fetch('/api/settings/test-gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: key })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            statusEl.innerHTML = '<span class="text-green-600">✅ ' + data.message + '</span>';
+        } else {
+            statusEl.innerHTML = '<span class="text-red-600">❌ ' + data.message + '</span>';
+        }
+    } catch (e) {
+        statusEl.innerHTML = '<span class="text-red-600">❌ Erro de conexão</span>';
+    }
+}
+
+async function testOpenRouterApi() {
+    const key = document.getElementById('cfg-openrouter-key').value;
+    const statusEl = document.getElementById('cfg-openrouter-status');
+
+    if (!key) {
+        statusEl.innerHTML = '<span class="text-red-600">❌ Informe a chave</span>';
+        return;
+    }
+
+    statusEl.innerHTML = '<span class="text-yellow-600">⏳ Testando...</span>';
+
+    try {
+        const response = await fetch('/api/settings/test-openrouter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: key })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            statusEl.innerHTML = '<span class="text-green-600">✅ ' + data.message + '</span>';
+        } else {
+            statusEl.innerHTML = '<span class="text-red-600">❌ ' + data.message + '</span>';
+        }
+    } catch (e) {
+        statusEl.innerHTML = '<span class="text-red-600">❌ Erro de conexão</span>';
+    }
+}
+
+// Fechar modal de configurações com ESC
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal && !settingsModal.classList.contains('hidden')) {
+            closeSettingsModal();
+        }
+    }
+});
