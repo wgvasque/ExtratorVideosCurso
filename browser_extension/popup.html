@@ -833,62 +833,155 @@
 
     <!-- SETTINGS TAB -->
     <div id="tab-settings" class="tab-panel">
+      <!-- Seção: Autenticação -->
+      <div class="mb-4">
+        <h3
+          style="font-family: 'Space Grotesk', sans-serif; font-size: 14px; color: #666; text-transform: uppercase; margin-bottom: 2px;">
+          🔒 Autenticação</h3>
+        <p style="font-size: 10px; color: #999; margin-bottom: 8px;">Configure as credenciais para acessar plataformas
+          de cursos e APIs de IA</p>
+      </div>
+
+      <!-- Credenciais por Domínio -->
       <div class="card" style="margin-bottom: 12px;">
-        <div class="card-title">🔑 Chaves de API</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div class="card-title" style="margin-bottom: 0;">🔐 CREDENCIAIS POR DOMÍNIO</div>
+          <button id="add-credential-btn" class="btn btn-sun btn-sm" style="padding: 2px 6px;">➕ Adicionar</button>
+        </div>
+        <div
+          style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 10px; color: #1e40af;">
+          💡 <strong>Para que serve:</strong> Login automático em plataformas de cursos (Hub.la, Hotmart, etc) para
+          acessar vídeos protegidos por autenticação.
+        </div>
+        <div id="credentials-list" class="space-y-3">
+          <!-- Lista dinâmica de credenciais -->
+        </div>
+      </div>
+
+      <!-- API Keys -->
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-title">🔑 CHAVES DE API</div>
+        <div
+          style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 10px; color: #1e40af;">
+          💡 <strong>Para que serve:</strong> Autenticação com serviços de IA que geram os resumos dos vídeos. Obtenha
+          sua chave em <a href="https://aistudio.google.com/apikey" target="_blank"
+            style="font-weight: bold; text-decoration: underline;">Google AI Studio</a>.
+        </div>
 
         <div style="margin-bottom: 12px;">
-          <label style="display: block; font-size: 10px; font-weight: 600; margin-bottom: 4px;">GEMINI API KEY</label>
+          <label style="display: block; font-size: 10px; font-weight: 600; margin-bottom: 2px;">GEMINI API KEY</label>
+          <p style="font-size: 9px; color: #999; margin-bottom: 6px;">Chave da API do Google Gemini - principal IA usada
+            para gerar resumos</p>
           <div style="display: flex; gap: 6px;">
             <input type="password" id="settings-gemini-key" placeholder="AIzaSy..."
               style="flex: 1; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; font-size: 11px;">
-            <button class="btn btn-sun btn-sm" onclick="testGeminiKey()">Testar</button>
+            <button id="test-gemini-btn" class="btn btn-sun btn-sm">Testar</button>
           </div>
           <div id="gemini-key-status" style="font-size: 9px; margin-top: 4px;"></div>
         </div>
 
         <div>
-          <label style="display: block; font-size: 10px; font-weight: 600; margin-bottom: 4px;">OPENROUTER API KEY <span
+          <label style="display: block; font-size: 10px; font-weight: 600; margin-bottom: 2px;">OPENROUTER API KEY <span
               style="color: #999;">(opcional)</span></label>
+          <p style="font-size: 9px; color: #999; margin-bottom: 6px;">Alternativa ao Gemini - usado como fallback ou
+            provedor principal se preferir</p>
           <div style="display: flex; gap: 6px;">
             <input type="password" id="settings-openrouter-key" placeholder="sk-or-v1-..."
               style="flex: 1; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; font-size: 11px;">
-            <button class="btn btn-sun btn-sm" onclick="testOpenRouterKey()">Testar</button>
+            <button id="test-openrouter-btn" class="btn btn-sun btn-sm">Testar</button>
           </div>
           <div id="openrouter-key-status" style="font-size: 9px; margin-top: 4px;"></div>
         </div>
       </div>
 
-      <div class="card" style="margin-bottom: 12px;">
-        <div class="card-title">🤖 Modelo de IA</div>
-        <select id="settings-ia-provider"
-          style="width: 100%; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; font-size: 11px; margin-bottom: 8px;">
-          <option value="gemini">Gemini (Recomendado)</option>
-          <option value="openrouter">OpenRouter</option>
-          <option value="auto">Automático (fallback)</option>
-        </select>
+      <!-- Seção: Processamento -->
+      <div class="mb-4" style="margin-top: 20px;">
+        <h3
+          style="font-family: 'Space Grotesk', sans-serif; font-size: 14px; color: #666; text-transform: uppercase; margin-bottom: 2px;">
+          🤖 Processamento</h3>
+        <p style="font-size: 10px; color: #999; margin-bottom: 8px;">Configure como o áudio é transcrito e os resumos
+          são gerados</p>
+      </div>
 
-        <div class="toggle-container" style="margin-bottom: 0;">
-          <input type="checkbox" id="settings-fallback" checked>
-          <label for="settings-fallback">Usar fallback automático</label>
+      <!-- Provedor de IA -->
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-title">⚡ PROVEDOR DE IA</div>
+        <div
+          style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 10px; color: #1e40af;">
+          💡 <strong>Para que serve:</strong> Define qual serviço de IA irá processar a transcrição e gerar o resumo do
+          vídeo.
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-size: 10px; font-weight: 600; margin-bottom: 2px;">PROVEDOR
+            PRINCIPAL</label>
+          <p style="font-size: 9px; color: #999; margin-bottom: 6px;">Gemini é mais rápido e recomendado • OpenRouter
+            oferece mais modelos</p>
+          <select id="settings-ia-provider"
+            style="width: 100%; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; font-size: 11px;">
+            <option value="gemini">Gemini (Recomendado)</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="auto">Automático (fallback)</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-3"
+          style="background: #fffbeb; padding: 10px; border-radius: 8px; border: 1px solid #fde68a; display: flex; align-items: start;">
+          <input type="checkbox" id="settings-fallback" checked style="margin-top: 2px;">
+          <div>
+            <label for="settings-fallback" style="font-weight: bold; font-size: 11px; display: block;">Usar fallback
+              automático</label>
+            <p style="font-size: 9px; color: #92400e; margin-top: 2px;">Se o provedor principal falhar, tenta
+              automaticamente o outro</p>
+          </div>
         </div>
       </div>
 
+      <!-- Modelo de Prompt -->
       <div class="card" style="margin-bottom: 12px;">
-        <div class="card-title">🎤 Whisper</div>
+        <div class="card-title">📝 TEMPLATE DE RESUMO</div>
+        <div
+          style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 10px; color: #1e40af;">
+          💡 <strong>Para que serve:</strong> Define o formato e estilo do resumo gerado. Cada modelo produz um tipo
+          diferente de saída (notas de estudo, resumo executivo, etc).
+        </div>
+        <div>
+          <label style="display: block; font-size: 10px; font-weight: 600; margin-bottom: 2px;">MODELO DE PROMPT</label>
+          <p style="font-size: 9px; color: #999; margin-bottom: 6px;">Templates disponíveis na pasta modelos_prompts/ do
+            projeto</p>
+          <select id="settings-prompt-model"
+            style="width: 100%; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; font-size: 11px;">
+            <option value="">Carregando prompts...</option>
+          </select>
+          <div id="settings-prompt-status"></div>
+        </div>
+      </div>
+
+      <!-- Whisper -->
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-title">🎙️ WHISPER (Transcrição por IA)</div>
+        <div
+          style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 10px; color: #1e40af;">
+          💡 <strong>Para que serve:</strong> Converte o áudio do vídeo em texto. Whisper é a IA da OpenAI especializada
+          em transcrição de áudio.
+        </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <div>
-            <label style="display: block; font-size: 9px; font-weight: 600; margin-bottom: 4px;">MODELO</label>
+          <div style="display: flex; flex-direction: column;">
+            <label style="display: block; font-size: 9px; font-weight: 600; margin-bottom: 2px;">MODELO</label>
+            <p style="font-size: 8px; color: #999; margin-bottom: 4px; min-height: 20px;">Maior modelo = melhor
+              qualidade, mas mais lento</p>
             <select id="settings-whisper-model"
-              style="width: 100%; padding: 6px; border: 2px solid var(--ink); border-radius: 6px; font-size: 10px;">
+              style="width: 100%; padding: 6px; border: 2px solid var(--ink); border-radius: 6px; font-size: 10px; margin-top: auto;">
               <option value="small">Small (500MB)</option>
               <option value="medium">Medium (1.5GB)</option>
               <option value="large-v3">Large V3 (3GB)</option>
             </select>
           </div>
-          <div>
-            <label style="display: block; font-size: 9px; font-weight: 600; margin-bottom: 4px;">DISPOSITIVO</label>
+          <div style="display: flex; flex-direction: column;">
+            <label style="display: block; font-size: 9px; font-weight: 600; margin-bottom: 2px;">DISPOSITIVO</label>
+            <p style="font-size: 8px; color: #999; margin-bottom: 4px; min-height: 20px;">GPU é muito mais rápido se
+              disponível</p>
             <select id="settings-whisper-device"
-              style="width: 100%; padding: 6px; border: 2px solid var(--ink); border-radius: 6px; font-size: 10px;">
+              style="width: 100%; padding: 6px; border: 2px solid var(--ink); border-radius: 6px; font-size: 10px; margin-top: auto;">
               <option value="cpu">CPU</option>
               <option value="cuda">GPU (CUDA)</option>
             </select>
@@ -896,7 +989,43 @@
         </div>
       </div>
 
-      <button class="btn btn-primary btn-full" onclick="saveSettings()" style="margin-top: 8px;">
+      <!-- Seção: Sistema -->
+      <div class="mb-4" style="margin-top: 20px;">
+        <h3
+          style="font-family: 'Space Grotesk', sans-serif; font-size: 14px; color: #666; text-transform: uppercase; margin-bottom: 2px;">
+          💾 Sistema</h3>
+        <p style="font-size: 10px; color: #999; margin-bottom: 8px;">Configurações de armazenamento e cache</p>
+      </div>
+
+      <!-- Armazenamento e Cache -->
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-title">📁 ARMAZENAMENTO E CACHE</div>
+        <div
+          style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 10px; color: #1e40af;">
+          💡 <strong>Para que serve:</strong> Define onde os relatórios são salvos e por quanto tempo os dados ficam em
+          cache.
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div style="display: flex; flex-direction: column;">
+            <label style="display: block; font-size: 9px; font-weight: 600; margin-bottom: 2px;">PASTA DE
+              SUMÁRIOS</label>
+            <p style="font-size: 8px; color: #999; margin-bottom: 4px; min-height: 20px;">Diretório onde os relatórios
+              HTML são salvos</p>
+            <input type="text" id="settings-sumarios-dir" placeholder="sumarios"
+              style="width: 100%; padding: 6px; border: 2px solid var(--ink); border-radius: 6px; font-size: 10px; margin-top: auto;">
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <label style="display: block; font-size: 9px; font-weight: 600; margin-bottom: 2px;">CACHE TTL
+              (HORAS)</label>
+            <p style="font-size: 8px; color: #999; margin-bottom: 4px; min-height: 20px;">Tempo para manter transcrições
+              em cache (evita reprocessar)</p>
+            <input type="number" id="settings-cache-ttl" placeholder="168" min="1" max="720"
+              style="width: 100%; padding: 6px; border: 2px solid var(--ink); border-radius: 6px; font-size: 10px; margin-top: auto;">
+          </div>
+        </div>
+      </div>
+
+      <button id="save-settings-btn" class="btn btn-primary btn-full" style="margin-top: 8px;">
         💾 SALVAR CONFIGURAÇÕES
       </button>
 

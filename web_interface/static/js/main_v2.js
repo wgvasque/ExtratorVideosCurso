@@ -1563,5 +1563,356 @@ document.addEventListener('keydown', (e) => {
         if (settingsModal && !settingsModal.classList.contains('hidden')) {
             closeSettingsModal();
         }
+        const promptsModal = document.getElementById('prompts-modal');
+        if (promptsModal && !promptsModal.classList.contains('hidden')) {
+            closePromptsModal();
+        }
     }
 });
+
+// ===== EDITOR DE PROMPTS =====
+let easyMDE = null;
+let currentEditingPrompt = null;
+let isNewPrompt = false;
+
+function openPromptsModal() {
+    const modal = document.getElementById('prompts-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.style.overflow = 'hidden'; // Bloquear scroll da página
+    loadPromptsList();
+}
+
+function closePromptsModal() {
+    const modal = document.getElementById('prompts-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.style.overflow = ''; // Restaurar scroll da página
+
+    // Limpar estado
+    currentEditingPrompt = null;
+    isNewPrompt = false;
+
+    // Destruir EasyMDE se existir
+    if (easyMDE) {
+        easyMDE.toTextArea();
+        easyMDE = null;
+    }
+
+    // Resetar UI
+    document.getElementById('editor-header').classList.add('hidden');
+    document.getElementById('editor-container').classList.add('hidden');
+    document.getElementById('editor-placeholder').classList.remove('hidden');
+}
+
+async function loadPromptsList() {
+    const listEl = document.getElementById('prompts-list');
+
+    // Salvar posição do scroll antes de atualizar
+    const scrollPosition = listEl.scrollTop;
+
+    // Só mostrar loading se a lista estiver vazia
+    if (!listEl.children.length || listEl.querySelector('.text-gray-500')) {
+        listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">⏳ Carregando...</p>';
+    }
+
+    try {
+        const response = await fetch('/prompts');
+        const data = await response.json();
+
+        if (!data.prompts || data.prompts.length === 0) {
+            listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">Nenhum prompt encontrado</p>';
+            return;
+        }
+
+        // Filtrar README
+        const prompts = data.prompts.filter(p => p.name.toLowerCase() !== 'readme');
+
+        listEl.innerHTML = prompts.map(p => `
+            <div class="prompt-item border-2 border-ink rounded-lg p-3 cursor-pointer hover:bg-sun/20 transition-colors ${currentEditingPrompt === p.name ? 'bg-sun/30 border-pop' : 'bg-white'}"
+                 onclick="editPrompt('${p.name}')">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-sm">${p.name}</span>
+                    <span class="text-lg">${p.valid ? '✅' : '❌'}</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">${p.sections}/14 seções</div>
+            </div>
+        `).join('');
+
+        // Restaurar posição do scroll
+        listEl.scrollTop = scrollPosition;
+    } catch (e) {
+        console.error('Erro ao carregar prompts:', e);
+        listEl.innerHTML = '<p class="text-sm text-red-500 text-center py-4">❌ Erro ao carregar</p>';
+    }
+}
+
+function createNewPrompt() {
+    currentEditingPrompt = null;
+    isNewPrompt = true;
+
+    // Mostrar editor
+    document.getElementById('editor-placeholder').classList.add('hidden');
+    document.getElementById('editor-header').classList.remove('hidden');
+    document.getElementById('editor-container').classList.remove('hidden');
+
+    // Configurar campos
+    const nameInput = document.getElementById('prompt-name-input');
+    nameInput.value = '';
+    nameInput.disabled = false;
+    nameInput.focus();
+
+    document.getElementById('prompt-status-badge').innerHTML = '<span class="text-blue-600">🆕 Novo prompt</span>';
+    document.getElementById('prompt-info').textContent = 'Preencha o nome e conteúdo do novo prompt';
+    document.getElementById('delete-prompt-btn').classList.add('hidden');
+
+    // Inicializar ou limpar editor
+    initEasyMDE('');
+
+    // Atualizar lista visual
+    loadPromptsList();
+}
+
+async function editPrompt(name) {
+    currentEditingPrompt = name;
+    isNewPrompt = false;
+
+    // Mostrar loading
+    document.getElementById('editor-placeholder').classList.add('hidden');
+    document.getElementById('editor-header').classList.remove('hidden');
+    document.getElementById('editor-container').classList.remove('hidden');
+    document.getElementById('prompt-info').textContent = '⏳ Carregando...';
+
+    try {
+        const response = await fetch(`/api/prompt/${name}/content`);
+        const data = await response.json();
+
+        if (data.error) {
+            showToast('Erro ao carregar prompt: ' + data.error, 'error');
+            return;
+        }
+
+        // Configurar campos
+        const nameInput = document.getElementById('prompt-name-input');
+        nameInput.value = name;
+        nameInput.disabled = true; // Não permite renomear
+
+        // Buscar status de validação
+        const validationResp = await fetch(`/prompts/${name}`);
+        const validationData = await validationResp.json();
+
+        const statusBadge = document.getElementById('prompt-status-badge');
+        if (validationData.validation?.valid) {
+            statusBadge.innerHTML = '<span class="text-green-600">✅ Válido</span>';
+        } else {
+            statusBadge.innerHTML = `<span class="text-red-600">❌ Inválido (${validationData.validation?.sections_found || 0}/14 seções)</span>`;
+        }
+
+        document.getElementById('prompt-info').textContent = `📄 ${data.size} caracteres`;
+        document.getElementById('delete-prompt-btn').classList.remove('hidden');
+
+        // Inicializar editor com conteúdo
+        initEasyMDE(data.content);
+
+        // Atualizar lista visual
+        loadPromptsList();
+    } catch (e) {
+        console.error('Erro ao carregar prompt:', e);
+        showToast('Erro ao carregar prompt', 'error');
+    }
+}
+
+function initEasyMDE(content) {
+    // Destruir instância anterior se existir
+    if (easyMDE) {
+        easyMDE.toTextArea();
+        easyMDE = null;
+    }
+
+    const textarea = document.getElementById('prompt-editor');
+    textarea.value = content;
+
+    // Estado inicial do word wrap
+    let wordWrapEnabled = true;
+
+    easyMDE = new EasyMDE({
+        element: textarea,
+        spellChecker: false,
+        autosave: { enabled: false },
+        status: ['lines', 'words', 'cursor'],
+        toolbar: [
+            { name: 'bold', action: EasyMDE.toggleBold, className: 'fa fa-bold', title: 'Negrito' },
+            { name: 'italic', action: EasyMDE.toggleItalic, className: 'fa fa-italic', title: 'Itálico' },
+            { name: 'heading', action: EasyMDE.toggleHeadingSmaller, className: 'fa fa-header', title: 'Título' },
+            '|',
+            { name: 'quote', action: EasyMDE.toggleBlockquote, className: 'fa fa-quote-left', title: 'Citação' },
+            { name: 'unordered-list', action: EasyMDE.toggleUnorderedList, className: 'fa fa-list-ul', title: 'Lista não ordenada' },
+            { name: 'ordered-list', action: EasyMDE.toggleOrderedList, className: 'fa fa-list-ol', title: 'Lista ordenada' },
+            '|',
+            { name: 'link', action: EasyMDE.drawLink, className: 'fa fa-link', title: 'Inserir link' },
+            { name: 'code', action: EasyMDE.toggleCodeBlock, className: 'fa fa-code', title: 'Código' },
+            '|',
+            { name: 'preview', action: EasyMDE.togglePreview, className: 'fa fa-eye no-disable', title: 'Visualizar' },
+            { name: 'side-by-side', action: EasyMDE.toggleSideBySide, className: 'fa fa-columns no-disable no-mobile', title: 'Lado a lado' },
+            { name: 'fullscreen', action: EasyMDE.toggleFullScreen, className: 'fa fa-arrows-alt no-disable no-mobile', title: 'Tela cheia' },
+            '|',
+            {
+                name: 'word-wrap',
+                action: function (editor) {
+                    wordWrapEnabled = !wordWrapEnabled;
+                    editor.codemirror.setOption('lineWrapping', wordWrapEnabled);
+
+                    // Atualizar aparência do botão
+                    const btn = document.querySelector('.editor-toolbar button[title="Quebra de linha"]');
+                    if (btn) {
+                        btn.classList.toggle('active', wordWrapEnabled);
+                        btn.style.background = wordWrapEnabled ? '#4ECDC4' : '';
+                        btn.style.color = wordWrapEnabled ? 'white' : '';
+                    }
+                },
+                className: 'fa fa-text-width',
+                title: 'Quebra de linha',
+            },
+            '|',
+            { name: 'guide', action: 'https://www.markdownguide.org/basic-syntax/', className: 'fa fa-question-circle', title: 'Guia Markdown' }
+        ],
+        minHeight: '400px',
+        placeholder: 'Digite o conteúdo do prompt em Markdown...',
+        lineWrapping: wordWrapEnabled,
+        previewRender: (plainText) => {
+            // Renderização básica de Markdown
+            return plainText
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                .replace(/\*(.*)\*/gim, '<em>$1</em>')
+                .replace(/`([^`]+)`/gim, '<code>$1</code>')
+                .replace(/\n/gim, '<br>');
+        }
+    });
+
+    // Marcar botão como ativo inicialmente
+    setTimeout(() => {
+        const btn = document.querySelector('.editor-toolbar button[title="Quebra de linha"]');
+        if (btn && wordWrapEnabled) {
+            btn.style.background = '#4ECDC4';
+            btn.style.color = 'white';
+        }
+    }, 100);
+}
+
+function toggleWordWrap() {
+    // Função mantida para compatibilidade, mas agora o toggle é feito pelo botão da toolbar
+    if (!easyMDE || !easyMDE.codemirror) return;
+    const current = easyMDE.codemirror.getOption('lineWrapping');
+    easyMDE.codemirror.setOption('lineWrapping', !current);
+}
+
+async function saveCurrentPrompt() {
+    const nameInput = document.getElementById('prompt-name-input');
+    const name = nameInput.value.trim();
+    const content = easyMDE ? easyMDE.value() : '';
+
+    if (!name) {
+        showToast('Nome do prompt é obrigatório', 'error');
+        nameInput.focus();
+        return;
+    }
+
+    if (!content) {
+        showToast('Conteúdo do prompt não pode estar vazio', 'error');
+        return;
+    }
+
+    try {
+        let response;
+        if (isNewPrompt) {
+            // Criar novo
+            response = await fetch('/api/prompt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, content })
+            });
+        } else {
+            // Atualizar existente
+            response = await fetch(`/api/prompt/${currentEditingPrompt}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content })
+            });
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+
+            // Se era novo, atualizar estado
+            if (isNewPrompt) {
+                currentEditingPrompt = data.name;
+                isNewPrompt = false;
+                nameInput.disabled = true;
+                document.getElementById('delete-prompt-btn').classList.remove('hidden');
+            }
+
+            // Recarregar lista
+            loadPromptsList();
+
+            // Atualizar seletor de prompts nas configurações (se modal estiver aberto)
+            if (typeof populateConfigPromptSelector === 'function') {
+                populateConfigPromptSelector();
+            }
+        } else {
+            showToast(data.error || 'Erro ao salvar', 'error');
+        }
+    } catch (e) {
+        console.error('Erro ao salvar prompt:', e);
+        showToast('Erro de conexão ao salvar', 'error');
+    }
+}
+
+async function deleteCurrentPrompt() {
+    if (!currentEditingPrompt || isNewPrompt) return;
+
+    const confirmed = await showConfirmDialog(
+        '🗑️ Excluir Prompt',
+        `Tem certeza que deseja excluir o prompt "${currentEditingPrompt}"? Esta ação não pode ser desfeita.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`/api/prompt/${currentEditingPrompt}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+
+            // Resetar estado
+            currentEditingPrompt = null;
+            isNewPrompt = false;
+
+            // Limpar editor
+            if (easyMDE) {
+                easyMDE.toTextArea();
+                easyMDE = null;
+            }
+
+            // Mostrar placeholder
+            document.getElementById('editor-header').classList.add('hidden');
+            document.getElementById('editor-container').classList.add('hidden');
+            document.getElementById('editor-placeholder').classList.remove('hidden');
+
+            // Recarregar lista
+            loadPromptsList();
+        } else {
+            showToast(data.error || 'Erro ao excluir', 'error');
+        }
+    } catch (e) {
+        console.error('Erro ao excluir prompt:', e);
+        showToast('Erro de conexão ao excluir', 'error');
+    }
+}

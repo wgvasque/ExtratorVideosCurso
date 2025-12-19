@@ -736,6 +736,9 @@ function showInfoModal(title, message, onOk) {
 // FUNÇÕES DE CONFIGURAÇÕES
 // ============================================
 
+// Variáveis globais para configurações e credenciais
+let credentialsData = {};
+
 // Carregar configurações da API
 async function loadSettingsFromApi() {
     // Valores padrão
@@ -743,21 +746,17 @@ async function loadSettingsFromApi() {
         ia_provider: 'gemini',
         use_fallback: true,
         whisper_model: 'small',
-        whisper_device: 'cpu'
+        whisper_device: 'cpu',
+        sumarios_dir: 'sumarios',
+        cache_ttl: 168
     };
-
-    // Aplicar padrões imediatamente
-    document.getElementById('settings-ia-provider').value = defaults.ia_provider;
-    document.getElementById('settings-fallback').checked = defaults.use_fallback;
-    document.getElementById('settings-whisper-model').value = defaults.whisper_model;
-    document.getElementById('settings-whisper-device').value = defaults.whisper_device;
 
     try {
         const response = await fetch('http://localhost:5000/api/settings');
         if (response.ok) {
             const data = await response.json();
 
-            // API Keys
+            // API Keys e Status
             if (data.gemini_api_key) {
                 document.getElementById('settings-gemini-key').value = data.gemini_api_key;
                 document.getElementById('gemini-key-status').innerHTML = '<span style="color: #22c55e; font-weight: bold;">✅ Configurada</span>';
@@ -772,11 +771,21 @@ async function loadSettingsFromApi() {
                 document.getElementById('openrouter-key-status').innerHTML = '<span style="color: #666;">Opcional - não configurada</span>';
             }
 
-            // Sobrescrever padrões com valores do servidor
+            // Campos de IA e Whisper
             document.getElementById('settings-ia-provider').value = data.ia_provider || defaults.ia_provider;
             document.getElementById('settings-fallback').checked = data.use_fallback !== false;
             document.getElementById('settings-whisper-model').value = data.whisper_model || defaults.whisper_model;
             document.getElementById('settings-whisper-device').value = data.whisper_device || defaults.whisper_device;
+
+            // Sistema
+            document.getElementById('settings-sumarios-dir').value = data.sumarios_dir || defaults.sumarios_dir;
+            document.getElementById('settings-cache-ttl').value = data.cache_ttl || defaults.cache_ttl;
+
+            // Popular select de prompts e definir valor nas configurações
+            await populateConfigPromptSelector(data.prompt_model || 'modelo2');
+
+            // Carregar credenciais por domínio
+            await loadCredentials();
         }
     } catch (e) {
         console.error('Erro ao carregar configurações:', e);
@@ -784,8 +793,159 @@ async function loadSettingsFromApi() {
     }
 }
 
-// Salvar configurações via API
+// Popular o select de prompts na aba de configurações
+async function populateConfigPromptSelector(currentValue) {
+    const selector = document.getElementById('settings-prompt-model');
+    const statusDiv = document.getElementById('settings-prompt-status');
+    if (!selector) return;
+
+    try {
+        const response = await fetch('http://localhost:5000/prompts');
+        const data = await response.json();
+
+        selector.innerHTML = '';
+
+        if (!data.prompts || data.prompts.length === 0) {
+            selector.innerHTML = '<option value="">❌ Nenhum prompt disponível</option>';
+            return;
+        }
+
+        data.prompts.forEach(prompt => {
+            const option = document.createElement('option');
+            option.value = prompt.name;
+            const icon = prompt.valid ? '✅' : '❌';
+            const sections = `(${prompt.sections}/14 seções)`;
+            option.textContent = `${icon} ${prompt.name} ${sections}`;
+            selector.appendChild(option);
+        });
+
+        selector.onchange = () => {
+            const selected = data.prompts.find(p => p.name === selector.value);
+            updateConfigPromptStatus(selected, statusDiv);
+        };
+
+        if (currentValue && data.prompts.find(p => p.name === currentValue)) {
+            selector.value = currentValue;
+        } else {
+            const firstValid = data.prompts.find(p => p.valid);
+            selector.value = firstValid ? firstValid.name : data.prompts[0].name;
+        }
+
+        const initial = data.prompts.find(p => p.name === selector.value);
+        updateConfigPromptStatus(initial, statusDiv);
+
+    } catch (e) {
+        console.error('Erro ao popular prompts:', e);
+    }
+}
+
+function updateConfigPromptStatus(prompt, statusDiv) {
+    if (!statusDiv || !prompt) return;
+    if (prompt.valid) {
+        statusDiv.innerHTML = `<div style="background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 8px; padding: 8px; margin-top: 8px; font-size: 10px; color: #047857;">✅ <strong>Prompt válido</strong> - ${prompt.sections}/14 seções</div>`;
+    } else {
+        statusDiv.innerHTML = `<div style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 8px; margin-top: 8px; font-size: 10px; color: #b91c1c;">❌ <strong>Prompt inválido</strong> - Faltam seções obrigatórias</div>`;
+    }
+}
+
+// Lógica de Credenciais por Domínio
+async function loadCredentials() {
+    try {
+        const response = await fetch('http://localhost:5000/api/credentials');
+        if (response.ok) {
+            credentialsData = await response.json();
+            renderCredentialsList();
+        }
+    } catch (e) {
+        console.error('Erro ao carregar credenciais:', e);
+    }
+}
+
+function renderCredentialsList() {
+    const container = document.getElementById('credentials-list');
+    if (!container) return;
+
+    const domains = Object.keys(credentialsData);
+    if (domains.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #999; font-size: 10px; padding: 10px;">Nenhuma credencial configurada.</div>';
+        return;
+    }
+
+    container.innerHTML = domains.map((domain, index) => `
+        <div class="credential-item" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin-bottom: 8px;" data-domain="${domain}">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <input type="text" value="${domain}" 
+                    class="domain-input"
+                    style="flex: 1; padding: 4px 6px; border: 1px solid var(--ink); border-radius: 4px; font-size: 10px; font-family: monospace;">
+                <button class="remove-credential-btn" style="color: #ef4444; border: none; background: none; cursor: pointer; font-size: 12px; margin-left: 6px;">✕</button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                <input type="text" value="${credentialsData[domain].email || ''}" 
+                    placeholder="Email/Login" 
+                    class="email-input"
+                    style="padding: 4px; border: 1px solid var(--ink); border-radius: 4px; font-size: 9px;">
+                <input type="password" value="${credentialsData[domain].senha || ''}" 
+                    placeholder="Senha" 
+                    class="password-input"
+                    style="padding: 4px; border: 1px solid var(--ink); border-radius: 4px; font-size: 9px;">
+            </div>
+        </div>
+    `).join('');
+
+    // Adicionar listeners para os elementos criados dinamicamente
+    container.querySelectorAll('.credential-item').forEach(item => {
+        const domain = item.getAttribute('data-domain');
+        const domainInput = item.querySelector('.domain-input');
+        const removeBtn = item.querySelector('.remove-credential-btn');
+        const emailInput = item.querySelector('.email-input');
+        const passInput = item.querySelector('.password-input');
+
+        domainInput.onchange = (e) => updateCredentialDomain(domain, e.target.value);
+        removeBtn.onclick = () => removeCredential(domain);
+        emailInput.onchange = (e) => {
+            credentialsData[domain].email = e.target.value;
+            markSettingsChanged();
+        };
+        passInput.onchange = (e) => {
+            credentialsData[domain].senha = e.target.value;
+            markSettingsChanged();
+        };
+    });
+}
+
+function addCredential() {
+    const domain = prompt('Domínio plataforma (ex: alunos.segueadii.com.br):');
+    if (domain && domain.trim()) {
+        const d = domain.trim();
+        if (!credentialsData[d]) {
+            credentialsData[d] = { email: '', senha: '' };
+            renderCredentialsList();
+        }
+    }
+}
+
+function removeCredential(domain) {
+    if (confirm(`Remover credenciais de ${domain}?`)) {
+        delete credentialsData[domain];
+        renderCredentialsList();
+    }
+}
+
+function updateCredentialDomain(oldDomain, newDomain) {
+    if (newDomain && newDomain !== oldDomain) {
+        credentialsData[newDomain] = credentialsData[oldDomain];
+        delete credentialsData[oldDomain];
+        renderCredentialsList();
+    }
+}
+
+// Salvar tudo
 async function saveSettings() {
+    const btn = document.getElementById('save-settings-btn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Salvando...';
+    btn.disabled = true;
+
     const settings = {
         gemini_api_key: document.getElementById('settings-gemini-key').value,
         openrouter_api_key: document.getElementById('settings-openrouter-key').value,
@@ -793,107 +953,92 @@ async function saveSettings() {
         use_fallback: document.getElementById('settings-fallback').checked,
         whisper_model: document.getElementById('settings-whisper-model').value,
         whisper_device: document.getElementById('settings-whisper-device').value,
-        // Manter valores padrão para campos não exibidos
-        openrouter_model: 'google/gemini-2.0-flash-exp:free',
-        prompt_model: 'modelo2',
-        sumarios_dir: 'sumarios',
-        cache_ttl: 72
+        prompt_model: document.getElementById('settings-prompt-model').value,
+        sumarios_dir: document.getElementById('settings-sumarios-dir').value,
+        cache_ttl: parseInt(document.getElementById('settings-cache-ttl').value) || 168,
+        openrouter_model: 'google/gemini-2.0-flash-exp:free'
     };
 
     try {
-        const response = await fetch('http://localhost:5000/api/settings', {
+        // 1. Salvar configurações gerais
+        const resp1 = await fetch('http://localhost:5000/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(settings)
         });
 
-        const toast = document.getElementById('settings-toast');
-        if (response.ok) {
-            toast.style.display = 'block';
-            toast.style.background = '#4ECDC4';
-            toast.style.color = '#2D3436';
-            toast.textContent = '✅ Configurações salvas!';
-        } else {
-            const err = await response.json();
-            toast.style.display = 'block';
-            toast.style.background = '#FF6B6B';
-            toast.style.color = 'white';
-            toast.textContent = '❌ Erro: ' + (err.error || 'Falha ao salvar');
-        }
+        // 2. Salvar credenciais
+        const resp2 = await fetch('http://localhost:5000/api/credentials', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(credentialsData)
+        });
 
-        setTimeout(() => {
-            toast.style.display = 'none';
-        }, 3000);
+        if (resp1.ok && resp2.ok) {
+            showToast('✅ Configurações salvas!', 'success');
+            extensionSettingsChanged = false; // Resetar flag de alterações
+            setTimeout(() => loadSettingsFromApi(), 500);
+        } else {
+            showToast('❌ Erro ao salvar', 'error');
+        }
     } catch (e) {
-        const toast = document.getElementById('settings-toast');
-        toast.style.display = 'block';
-        toast.style.background = '#FF6B6B';
-        toast.style.color = 'white';
-        toast.textContent = '❌ Erro de conexão';
-        setTimeout(() => {
-            toast.style.display = 'none';
-        }, 3000);
+        showToast('❌ Erro de conexão', 'error');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     }
 }
 
-// Testar Gemini API Key
+function showToast(message, type) {
+    const toast = document.getElementById('settings-toast');
+    toast.textContent = message;
+    toast.style.display = 'block';
+    toast.style.background = type === 'success' ? '#def7ec' : '#fde2e2';
+    toast.style.color = type === 'success' ? '#03543f' : '#9b1c1c';
+    toast.style.border = `1px solid ${type === 'success' ? '#84e1bc' : '#f8b4b4'}`;
+
+    setTimeout(() => { toast.style.display = 'none'; }, 3000);
+}
+
+// Função para testar chaves (mantendo as existentes)
 async function testGeminiKey() {
     const key = document.getElementById('settings-gemini-key').value;
-    const statusEl = document.getElementById('gemini-key-status');
-
-    if (!key) {
-        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Informe a chave</span>';
-        return;
-    }
-
-    statusEl.innerHTML = '<span style="color: #f59e0b;">⏳ Testando...</span>';
-
+    const status = document.getElementById('gemini-key-status');
+    if (!key) { status.innerHTML = '<span style="color: #ef4444;">❌ Informe a chave</span>'; return; }
+    status.innerHTML = '<span style="color: #f59e0b;">⏳ Testando...</span>';
     try {
-        const response = await fetch('http://localhost:5000/api/settings/test-gemini', {
+        const resp = await fetch('http://localhost:5000/api/test_gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_key: key })
+            body: JSON.stringify({ key })
         });
-        const data = await response.json();
-
+        const data = await resp.json();
         if (data.success) {
-            statusEl.innerHTML = '<span style="color: #22c55e;">✅ ' + data.message + '</span>';
+            status.innerHTML = '<span style="color: #22c55e;">✅ Válida!</span>';
         } else {
-            statusEl.innerHTML = '<span style="color: #ef4444;">❌ ' + data.message + '</span>';
+            status.innerHTML = `<span style="color: #ef4444;">❌ Inválida: ${data.error || 'Erro'}</span>`;
         }
-    } catch (e) {
-        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Erro de conexão</span>';
-    }
+    } catch (e) { status.innerHTML = '<span style="color: #ef4444;">❌ Erro de conexão</span>'; }
 }
 
-// Testar OpenRouter API Key
 async function testOpenRouterKey() {
     const key = document.getElementById('settings-openrouter-key').value;
-    const statusEl = document.getElementById('openrouter-key-status');
-
-    if (!key) {
-        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Informe a chave</span>';
-        return;
-    }
-
-    statusEl.innerHTML = '<span style="color: #f59e0b;">⏳ Testando...</span>';
-
+    const status = document.getElementById('openrouter-key-status');
+    if (!key) { status.innerHTML = '<span style="color: #ef4444;">❌ Informe a chave</span>'; return; }
+    status.innerHTML = '<span style="color: #f59e0b;">⏳ Testando...</span>';
     try {
-        const response = await fetch('http://localhost:5000/api/settings/test-openrouter', {
+        const resp = await fetch('http://localhost:5000/api/test_openrouter', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_key: key })
+            body: JSON.stringify({ key })
         });
-        const data = await response.json();
-
+        const data = await resp.json();
         if (data.success) {
-            statusEl.innerHTML = '<span style="color: #22c55e;">✅ ' + data.message + '</span>';
+            status.innerHTML = '<span style="color: #22c55e;">✅ Válida!</span>';
         } else {
-            statusEl.innerHTML = '<span style="color: #ef4444;">❌ ' + data.message + '</span>';
+            status.innerHTML = `<span style="color: #ef4444;">❌ Inválida: ${data.error || 'Erro'}</span>`;
         }
-    } catch (e) {
-        statusEl.innerHTML = '<span style="color: #ef4444;">❌ Erro de conexão</span>';
-    }
+    } catch (e) { status.innerHTML = '<span style="color: #ef4444;">❌ Erro de conexão</span>'; }
 }
 
 // Flag para rastrear alterações nas configurações da extensão
@@ -902,13 +1047,39 @@ let currentActiveTab = 'capture';
 
 // Configurar listeners para detectar alterações nas configurações
 function setupExtensionSettingsChangeListeners() {
-    const settingsInputs = document.querySelectorAll('#tab-settings input, #tab-settings select, #tab-settings textarea');
+    const settingsInputs = document.querySelectorAll('#tab-settings input, #tab-settings select, #credentials-list input');
     settingsInputs.forEach(input => {
         input.removeEventListener('change', markSettingsChanged);
         input.removeEventListener('input', markSettingsChanged);
         input.addEventListener('change', markSettingsChanged);
         input.addEventListener('input', markSettingsChanged);
     });
+
+    // Botão de Salvar
+    const saveBtn = document.getElementById('save-settings-btn');
+    if (saveBtn) {
+        saveBtn.removeEventListener('click', saveSettings);
+        saveBtn.addEventListener('click', saveSettings);
+    }
+
+    // Botão de Adicionar Credencial
+    const addCredBtn = document.getElementById('add-credential-btn');
+    if (addCredBtn) {
+        addCredBtn.removeEventListener('click', addCredential);
+        addCredBtn.addEventListener('click', addCredential);
+    }
+
+    // Botões de Teste
+    const testGeminiBtn = document.getElementById('test-gemini-btn');
+    if (testGeminiBtn) {
+        testGeminiBtn.removeEventListener('click', testGeminiKey);
+        testGeminiBtn.addEventListener('click', testGeminiKey);
+    }
+    const testOpenRouterBtn = document.getElementById('test-openrouter-btn');
+    if (testOpenRouterBtn) {
+        testOpenRouterBtn.removeEventListener('click', testOpenRouterKey);
+        testOpenRouterBtn.addEventListener('click', testOpenRouterKey);
+    }
 }
 
 function markSettingsChanged() {

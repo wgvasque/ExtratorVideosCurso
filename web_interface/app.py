@@ -750,6 +750,103 @@ def validate_prompt_endpoint():
         print(f"Erro ao validar prompt: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/prompt/<prompt_name>/content')
+def get_prompt_content(prompt_name):
+    """Obter conteúdo completo de um prompt para edição"""
+    try:
+        prompts_dir = PROJECT_ROOT / 'modelos_prompts'
+        prompt_file = prompts_dir / f'{prompt_name}.md'
+        
+        if not prompt_file.exists():
+            return jsonify({'error': 'Prompt não encontrado'}), 404
+        
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return jsonify({
+            'name': prompt_name,
+            'content': content,
+            'size': len(content)
+        })
+    except Exception as e:
+        print(f"Erro ao obter conteúdo do prompt: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/prompt', methods=['POST'])
+def create_prompt():
+    """Criar novo prompt"""
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        content = data.get('content', '')
+        
+        if not name:
+            return jsonify({'error': 'Nome do prompt é obrigatório'}), 400
+        
+        # Sanitizar nome (apenas letras, números e underscore)
+        import re
+        safe_name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+        if not safe_name:
+            return jsonify({'error': 'Nome inválido. Use apenas letras, números e underscore.'}), 400
+        
+        prompts_dir = PROJECT_ROOT / 'modelos_prompts'
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        prompt_file = prompts_dir / f'{safe_name}.md'
+        
+        if prompt_file.exists():
+            return jsonify({'error': f'Já existe um prompt com nome "{safe_name}"'}), 409
+        
+        with open(prompt_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({'success': True, 'name': safe_name, 'message': f'Prompt "{safe_name}" criado com sucesso!'})
+    except Exception as e:
+        print(f"Erro ao criar prompt: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/prompt/<prompt_name>', methods=['PUT'])
+def update_prompt(prompt_name):
+    """Atualizar conteúdo de um prompt existente"""
+    try:
+        data = request.get_json()
+        content = data.get('content', '')
+        
+        prompts_dir = PROJECT_ROOT / 'modelos_prompts'
+        prompt_file = prompts_dir / f'{prompt_name}.md'
+        
+        if not prompt_file.exists():
+            return jsonify({'error': 'Prompt não encontrado'}), 404
+        
+        with open(prompt_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({'success': True, 'name': prompt_name, 'message': f'Prompt "{prompt_name}" atualizado com sucesso!'})
+    except Exception as e:
+        print(f"Erro ao atualizar prompt: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/prompt/<prompt_name>', methods=['DELETE'])
+def delete_prompt(prompt_name):
+    """Excluir um prompt"""
+    try:
+        # Não permitir excluir README
+        if prompt_name.lower() == 'readme':
+            return jsonify({'error': 'Não é permitido excluir o README'}), 403
+        
+        prompts_dir = PROJECT_ROOT / 'modelos_prompts'
+        prompt_file = prompts_dir / f'{prompt_name}.md'
+        
+        if not prompt_file.exists():
+            return jsonify({'error': 'Prompt não encontrado'}), 404
+        
+        prompt_file.unlink()
+        
+        return jsonify({'success': True, 'message': f'Prompt "{prompt_name}" excluído com sucesso!'})
+    except Exception as e:
+        print(f"Erro ao excluir prompt: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/report/<path:domain>/<path:video_id>')
 def view_report(domain, video_id):
     """
