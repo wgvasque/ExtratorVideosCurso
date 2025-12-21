@@ -45,7 +45,8 @@ processing_state = {
     'status': 'idle',
     'start_time': None,
     'logs': [],
-    'current_proc': None
+    'current_proc': None,
+    'queue': []  # Lista de URLs aguardando processamento
 }
 
 @app.route('/')
@@ -301,6 +302,131 @@ def start_processing():
 def process_options():
     return jsonify({'status': 'ok'})
 
+@app.route('/api/cancel', methods=['POST'])
+def cancel_processing():
+    """Cancelar processamento em andamento"""
+    global processing_state
+    
+    try:
+        data = request.json
+        url = data.get('url') if data else None
+        
+        # Verificar se há processamento ativo
+        if not processing_state.get('is_processing'):
+            return jsonify({'success': False, 'error': 'Nenhum processamento ativo'}), 400
+        
+        print(f"[API] Cancelando processamento: {url}")
+        
+        # Marcar para cancelamento
+        processing_state['cancel_requested'] = True
+        processing_state['is_processing'] = False
+        
+        # Tentar terminar processo Python se existir
+        current_proc = processing_state.get('current_proc')
+        if current_proc:
+            try:
+                print("[API] Terminando processo Python...")
+                current_proc.terminate()
+                try:
+                    current_proc.wait(timeout=5)
+                    print("[API] Processo terminado com sucesso")
+                except:
+                    print("[API] Processo não terminou, forçando kill...")
+                    current_proc.kill()
+                    current_proc.wait()
+                    print("[API] Processo killed")
+            except Exception as e:
+                print(f"[API] Erro ao terminar processo: {e}")
+        
+        # Limpar estado
+        processing_state['current_proc'] = None
+        processing_state['current_url'] = None
+        processing_state['current_video'] = 0
+        processing_state['total_videos'] = 0
+        processing_state['progress'] = 0
+        
+        # Emitir evento de cancelamento via WebSocket
+        socketio.emit('batch_cancelled', {
+            'message': 'Processamento cancelado pelo usuário',
+            'url': url
+        })
+        
+        return jsonify({'success': True, 'message': 'Processamento cancelado'})
+    except Exception as e:
+        print(f"[API] Erro ao cancelar: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/queue/remove', methods=['POST'])
+def remove_from_queue():
+    """Remover URL da fila de processamento"""
+    global processing_state
+    
+    try:
+        data = request.json
+        url = data.get('url')
+        
+        if not url:
+            return jsonify({'success': False, 'error': 'URL não fornecida'}), 400
+        
+        # Remover da fila
+        if url in processing_state['queue']:
+            processing_state['queue'].remove(url)
+            print(f"[API] URL removida da fila: {url}")
+            
+            # Emitir atualização da fila via WebSocket
+            socketio.emit('queue_updated', {
+                'queue': processing_state['queue'],
+                'total': len(processing_state['queue'])
+            })
+            
+            return jsonify({'success': True, 'message': 'URL removida da fila'})
+        else:
+            return jsonify({'success': False, 'error': 'URL não encontrada na fila'}), 404
+            
+    except Exception as e:
+        print(f"[API] Erro ao remover da fila: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/queue/add', methods=['POST'])
+def add_to_queue():
+    """Adicionar URL à fila de processamento"""
+    global processing_state
+    
+    try:
+        data = request.json
+        url = data.get('url')
+        
+        if not url:
+            return jsonify({'success': False, 'error': 'URL não fornecida'}), 400
+        
+        # Verificar se URL já está na fila ou sendo processada
+        if url in processing_state['queue']:
+            return jsonify({'success': False, 'error': 'URL já está na fila'}), 400
+        
+        if url == processing_state.get('current_url'):
+            return jsonify({'success': False, 'error': 'URL já está sendo processada'}), 400
+        
+        # Adicionar à fila
+        processing_state['queue'].append(url)
+        position = len(processing_state['queue'])
+        print(f"[API] URL adicionada à fila: {url} (posição {position})")
+        
+        # Emitir atualização da fila via WebSocket
+        socketio.emit('queue_updated', {
+            'queue': processing_state['queue'],
+            'total': len(processing_state['queue'])
+        })
+        
+        return jsonify({
+            'success': True, 
+            'message': f'URL adicionada à fila (posição {position})',
+            'position': position
+        })
+            
+    except Exception as e:
+        print(f"[API] Erro ao adicionar à fila: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/reprocess', methods=['POST', 'OPTIONS'])
 def reprocess_summary():
     """
@@ -393,6 +519,8 @@ def get_status():
         safe['current_step'] = safe.get('current_step') or 'Processando...'
     else:
         safe['current_step'] = 'idle'
+    # Incluir fila no status
+    safe['queue'] = safe.get('queue', [])
     return jsonify(safe)
 
 @app.route('/api/reports')
@@ -772,6 +900,27 @@ def get_prompt_content(prompt_name):
         print(f"Erro ao obter conteúdo do prompt: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/prompt/template')
+def get_prompt_template():
+    """Obter template padrão para novos prompts"""
+    try:
+        prompts_dir = PROJECT_ROOT / 'modelos_prompts'
+        template_file = prompts_dir / 'template.md'
+        
+        if not template_file.exists():
+            return jsonify({'error': 'Template não encontrado'}), 404
+        
+        with open(template_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return jsonify({
+            'content': content,
+            'size': len(content)
+        })
+    except Exception as e:
+        print(f"Erro ao obter template: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/prompt', methods=['POST'])
 def create_prompt():
     """Criar novo prompt"""
@@ -868,12 +1017,33 @@ def process_videos_batch(urls):
     except Exception:
         pass
     
+    # Inicializar fila com todas as URLs
+    processing_state['queue'] = list(urls)
+    
+    # Emitir estado inicial da fila
+    socketio.emit('queue_updated', {
+        'queue': processing_state['queue'],
+        'total': len(processing_state['queue'])
+    })
+    
     for i, url in enumerate(urls, 1):
         if not processing_state['is_processing']:
             break
         
+        # Remover URL atual da fila
+        if url in processing_state['queue']:
+            processing_state['queue'].remove(url)
+            
         processing_state['current_video'] = i
         processing_state['current_url'] = url
+        
+        # Emitir atualização da fila
+        socketio.emit('queue_updated', {
+            'queue': processing_state['queue'],
+            'total': len(processing_state['queue']),
+            'current': url
+        })
+        
         pu = urlparse(url)
         referer = f"{pu.scheme}://{pu.netloc}"
         domain = pu.netloc  # Extrair domínio para buscar credenciais
@@ -1117,33 +1287,7 @@ def process_videos_batch(urls):
         'status': 'completed'
     })
 
-@app.route('/api/cancel', methods=['POST'])
-def cancel_processing():
-    """Cancelar processamento em andamento"""
-    global processing_state
-    
-    if not processing_state['is_processing']:
-        return jsonify({'error': 'Nenhum processamento em andamento'}), 400
-    
-    # Tentar cancelar processo atual
-    proc = processing_state.get('current_proc')
-    if proc:
-        try:
-            proc.terminate()
-        except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-        processing_state['current_proc'] = None
-    processing_state['is_processing'] = False
-    processing_state['status'] = 'cancelled'
-    
-    socketio.emit('batch_cancelled', {
-        'message': 'Processamento cancelado pelo usuário'
-    })
-    
-    return jsonify({'status': 'cancelled'})
+
 
 @app.route('/api/health')
 def health():
@@ -1204,23 +1348,76 @@ def capture_manifest():
             except:
                 manifests = {}
         
-        # Adicionar novo manifest com TODOS os metadados
-        manifests[page_url] = {
-            'manifestUrl': manifest_url,
-            'domain': domain,
-            'timestamp': timestamp,
-            'captured_at': datetime.now().isoformat(),
-            'videoTitle': video_title,
-            'supportMaterials': support_materials
-        }
+        # Verificar duplicados: pular se já existe URL ou se vídeo muito recente com mesmo título
+        is_duplicate = False
+        now = datetime.now()
+        
+        # NOVO: Ignorar URLs de homepage de plataformas (sem ID de vídeo específico)
+        youtube_homepage_patterns = [
+            'https://www.youtube.com/',
+            'https://youtube.com/',
+            'https://www.youtube.com/#',
+            'https://www.youtube.com/feed',
+            'https://www.youtube.com/results',  # página de busca
+        ]
+        is_homepage = any(page_url == pattern or page_url.startswith(pattern + '?') for pattern in youtube_homepage_patterns)
+        
+        # YouTube: só permitir URLs com ID de vídeo (/watch?v= ou /shorts/)
+        if 'youtube.com' in page_url or 'youtu.be' in page_url:
+            has_video_id = ('/watch?v=' in page_url or '/shorts/' in page_url or 'youtu.be/' in page_url)
+            if not has_video_id:
+                print(f"⏭️ [Extension] Ignorando URL sem ID de vídeo: {page_url[:60]}...")
+                is_duplicate = True  # Tratar como duplicado para pular
+        
+        # Verificar se já existe (ou é muito parecido)
+        if not is_duplicate and page_url in manifests:
+            # Atualizar apenas o manifest URL (pode ter expirado)
+            existing = manifests[page_url]
+            existing['manifestUrl'] = manifest_url
+            existing['timestamp'] = timestamp
+            existing['captured_at'] = now.isoformat()
+            print(f"🔄 [Extension] Manifest atualizado (já existia): {domain}")
+            is_duplicate = True
+        elif not is_duplicate:
+            # Verificar se há vídeos muito recentes com o mesmo título (anti-spam)
+            # Aplicar para qualquer vídeo do YouTube (não só Shorts)
+            is_youtube = 'youtube.com' in page_url.lower() or 'youtu.be' in page_url.lower()
+            if video_title and is_youtube:
+                for stored_url, stored_data in manifests.items():
+                    stored_title = stored_data.get('videoTitle', '')
+                    stored_time_str = stored_data.get('captured_at', '')
+                    
+                    # Pular se mesmo título e capturado há menos de 120 segundos (2 min)
+                    if stored_title == video_title and stored_time_str:
+                        try:
+                            stored_time = datetime.fromisoformat(stored_time_str)
+                            seconds_ago = (now - stored_time).total_seconds()
+                            if seconds_ago < 120:
+                                print(f"⏭️ [Extension] Pulando duplicado recente ({int(seconds_ago)}s): {video_title[:50]}...")
+                                is_duplicate = True
+                                break
+                        except:
+                            pass
+        
+        # Adicionar novo manifest apenas se não for duplicado
+        if not is_duplicate:
+            manifests[page_url] = {
+                'manifestUrl': manifest_url,
+                'domain': domain,
+                'timestamp': timestamp,
+                'captured_at': now.isoformat(),
+                'videoTitle': video_title,
+                'supportMaterials': support_materials
+            }
+            
+            print(f"✅ [Extension] Manifest capturado: {domain}")
+            print(f"   Page: {page_url}")
+            print(f"   Manifest: {manifest_url[:80]}...")
         
         # Salvar
         with open(manifests_file, 'w', encoding='utf-8') as f:
             json.dump(manifests, f, indent=2, ensure_ascii=False)
-        
-        print(f"✅ [Extension] Manifest capturado: {domain}")
-        print(f"   Page: {page_url}")
-        print(f"   Manifest: {manifest_url[:80]}...")
+
         
         # NOVO: Auto-processar se solicitado
         auto_process = data.get('autoProcess', False)
@@ -1279,7 +1476,7 @@ def capture_manifest():
 
 @app.route('/api/manifests')
 def list_manifests():
-    """Listar todos os manifests capturados"""
+    """Listar todos os manifests capturados e limpar os antigos automaticamente"""
     project_root = Path(__file__).parent.parent
     manifests_file = project_root / 'captured_manifests.json'
     
@@ -1290,21 +1487,175 @@ def list_manifests():
         with open(manifests_file, 'r', encoding='utf-8') as f:
             manifests = json.load(f)
         
+        # Limpar manifests antigos (mais de 24 horas)
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        cutoff = now - timedelta(hours=24)
+        
+        cleaned_manifests = {}
+        removed_count = 0
+        
+        for page_url, data in manifests.items():
+            captured_at_str = data.get('captured_at', '')
+            try:
+                # Parse ISO format: 2025-12-20T23:11:10.393311
+                captured_at = datetime.fromisoformat(captured_at_str.replace('Z', '+00:00'))
+                # Se não tem timezone, assume local
+                if captured_at.tzinfo is None:
+                    captured_at = captured_at.replace(tzinfo=None)
+                    # Comparar sem timezone
+                    if captured_at > cutoff.replace(tzinfo=None):
+                        cleaned_manifests[page_url] = data
+                    else:
+                        removed_count += 1
+                else:
+                    if captured_at > cutoff:
+                        cleaned_manifests[page_url] = data
+                    else:
+                        removed_count += 1
+            except (ValueError, AttributeError):
+                # Se não conseguir parsear a data, mantém o manifest
+                cleaned_manifests[page_url] = data
+        
+        # Salvar manifests limpos de volta
+        if removed_count > 0:
+            with open(manifests_file, 'w', encoding='utf-8') as f:
+                json.dump(cleaned_manifests, f, indent=2, ensure_ascii=False)
+            print(f"[Cleanup] Removidos {removed_count} manifests antigos (>24h)")
+        
         # Converter para lista
         result = []
-        for page_url, data in manifests.items():
+        for page_url, data in cleaned_manifests.items():
             result.append({
                 'pageUrl': page_url,
                 'manifestUrl': data['manifestUrl'],
                 'domain': data.get('domain', ''),
                 'timestamp': data.get('timestamp', ''),
-                'captured_at': data.get('captured_at', '')
+                'captured_at': data.get('captured_at', ''),
+                'videoTitle': data.get('videoTitle', ''),
+                'pageTitle': data.get('pageTitle', ''),
+                'supportMaterials': data.get('supportMaterials', [])
             })
         
         # Ordenar por data de captura (mais recente primeiro)
         result.sort(key=lambda x: x.get('captured_at', ''), reverse=True)
         
         return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/manifests/cleanup', methods=['POST'])
+def cleanup_manifests():
+    """Limpar manualmente todos os manifests antigos"""
+    project_root = Path(__file__).parent.parent
+    manifests_file = project_root / 'captured_manifests.json'
+    
+    if not manifests_file.exists():
+        return jsonify({'message': 'Nenhum manifest encontrado', 'removed': 0})
+    
+    try:
+        # Obter parâmetro de horas (padrão 24)
+        hours = request.json.get('hours', 24) if request.is_json else 24
+        
+        with open(manifests_file, 'r', encoding='utf-8') as f:
+            manifests = json.load(f)
+        
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        cutoff = now - timedelta(hours=hours)
+        
+        cleaned_manifests = {}
+        removed_count = 0
+        
+        for page_url, data in manifests.items():
+            captured_at_str = data.get('captured_at', '')
+            try:
+                captured_at = datetime.fromisoformat(captured_at_str.replace('Z', '+00:00'))
+                if captured_at.tzinfo is None:
+                    captured_at = captured_at.replace(tzinfo=None)
+                    if captured_at > cutoff.replace(tzinfo=None):
+                        cleaned_manifests[page_url] = data
+                    else:
+                        removed_count += 1
+                else:
+                    if captured_at > cutoff:
+                        cleaned_manifests[page_url] = data
+                    else:
+                        removed_count += 1
+            except (ValueError, AttributeError):
+                # Se não conseguir parsear a data, mantém o manifest
+                cleaned_manifests[page_url] = data
+        
+        # Salvar manifests limpos
+        with open(manifests_file, 'w', encoding='utf-8') as f:
+            json.dump(cleaned_manifests, f, indent=2, ensure_ascii=False)
+        
+        return jsonify({
+            'message': f'Limpeza concluída',
+            'removed': removed_count,
+            'remaining': len(cleaned_manifests),
+            'hours': hours
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/manifests/refresh', methods=['POST'])
+def refresh_manifest_metadata():
+    """Atualizar metadados de um manifest específico (título, materiais de apoio)"""
+    project_root = Path(__file__).parent.parent
+    manifests_file = project_root / 'captured_manifests.json'
+    
+    if not manifests_file.exists():
+        return jsonify({'error': 'Nenhum manifest encontrado'}), 404
+    
+    try:
+        data = request.json
+        page_url = data.get('pageUrl')
+        
+        if not page_url:
+            return jsonify({'error': 'pageUrl é obrigatório'}), 400
+        
+        with open(manifests_file, 'r', encoding='utf-8') as f:
+            manifests = json.load(f)
+        
+        if page_url not in manifests:
+            return jsonify({'error': 'Manifest não encontrado'}), 404
+        
+        # Aqui você poderia fazer uma nova requisição à página para atualizar metadados
+        # Por enquanto, apenas retorna sucesso (a extensão faz isso via background script)
+        # Na web interface, isso seria mais complexo pois precisaria de um scraper
+        
+        return jsonify({
+            'success': True,
+            'message': 'Metadados atualizados (funcionalidade completa requer scraper)'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/manifests/cleanup-all', methods=['POST'])
+def cleanup_all_manifests():
+    """Limpar TODOS os manifests capturados"""
+    project_root = Path(__file__).parent.parent
+    manifests_file = project_root / 'captured_manifests.json'
+    
+    if not manifests_file.exists():
+        return jsonify({'message': 'Nenhum manifest encontrado', 'removed': 0})
+    
+    try:
+        with open(manifests_file, 'r', encoding='utf-8') as f:
+            manifests = json.load(f)
+        
+        removed_count = len(manifests)
+        
+        # Limpar tudo - criar arquivo vazio
+        with open(manifests_file, 'w', encoding='utf-8') as f:
+            json.dump({}, f, indent=2, ensure_ascii=False)
+        
+        return jsonify({
+            'message': 'Todos os manifests foram removidos',
+            'removed': removed_count,
+            'remaining': 0
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

@@ -68,11 +68,11 @@
 
         @keyframes blob {
             0% {
-                transform: scale(1);
+                transform: scale(1) rotate(0deg);
             }
 
             100% {
-                transform: scale(1.1);
+                transform: scale(1.1) rotate(5deg);
             }
         }
 
@@ -82,6 +82,7 @@
             width: 500px;
             height: 500px;
             background: #FF6B6B;
+            animation-delay: 0s;
         }
 
         .blob-2 {
@@ -90,6 +91,7 @@
             width: 400px;
             height: 400px;
             background: #4ECDC4;
+            animation-delay: 2s;
         }
 
         /* Button Standards */
@@ -99,13 +101,13 @@
             text-transform: uppercase;
             border: 2px solid #2D3436;
             border-radius: 0.75rem;
-            /* rounded-xl */
             padding: 0.5rem 1rem;
             box-shadow: 4px 4px 0px 0px #2D3436;
-            transition: all 0.1s;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
+            cursor: pointer;
         }
 
         .btn-retro:hover {
@@ -123,14 +125,26 @@
             color: white;
         }
 
+        .btn-primary:hover {
+            background-color: #ff5252;
+        }
+
         .btn-secondary {
             background-color: white;
             color: #2D3436;
         }
 
+        .btn-secondary:hover {
+            background-color: #f8f8f8;
+        }
+
         .btn-tertiary {
             background-color: #FFE66D;
             color: #2D3436;
+        }
+
+        .btn-tertiary:hover {
+            background-color: #ffd93d;
         }
 
         .retro-input {
@@ -142,8 +156,12 @@
             font-family: 'Space Grotesk', sans-serif;
             font-size: 1rem;
             box-shadow: 4px 4px 0px 0px #2D3436;
-            transition: all 0.2s;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             color: #2D3436 !important;
+        }
+
+        .retro-input:hover {
+            background: rgba(255, 255, 255, 0.8);
         }
 
         .retro-input:focus {
@@ -151,6 +169,7 @@
             background: white;
             transform: translate(-2px, -2px);
             box-shadow: 6px 6px 0px 0px #FF6B6B;
+            border-color: #FF6B6B;
         }
 
         .retro-input::placeholder {
@@ -160,17 +179,48 @@
 
         /* Scrollbar */
         ::-webkit-scrollbar {
-            width: 10px;
+            width: 12px;
         }
 
         ::-webkit-scrollbar-track {
-            background: transparent;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
         }
 
         ::-webkit-scrollbar-thumb {
             background: #FF6B6B;
             border: 2px solid #2D3436;
-            border-radius: 5px;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ff5252;
+        }
+
+        /* Smooth animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-enter {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        /* Line clamp utility */
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-clamp: 2;
+            overflow: hidden;
         }
     </style>
 </head>
@@ -183,18 +233,20 @@
     </div>
 
     <!-- HEADER -->
-    <header class="w-full max-w-4xl flex justify-between items-center mb-12">
+    <header class="w-full max-w-4xl flex justify-between items-center mb-16">
         <div>
-            <h1 class="font-display font-black text-4xl tracking-tight leading-none group cursor-default">
-                VIDEO<br><span class="text-accent">PROCESSOR</span>
+            <h1
+                class="font-display font-black text-5xl tracking-tight leading-none group cursor-default hover:scale-105 transition-transform duration-300">
+                VIDEO<br><span class="text-accent drop-shadow-lg">PROCESSOR</span>
             </h1>
+            <p class="text-xs font-bold text-ink/60 mt-2 tracking-wider">SOLAR POP EDITION</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-3">
             <button onclick="openPromptsModal()" class="btn-retro btn-tertiary text-sm" title="Editor de Prompts">
                 📝 PROMPTS
             </button>
             <button onclick="openSettingsModal()" class="btn-retro btn-secondary text-sm" title="Configurações">
-                ⚙️ CONFIGURAÇÕES
+                ⚙️ CONFIG
             </button>
         </div>
     </header>
@@ -203,7 +255,10 @@
 
         <!-- INPUT SECTION -->
         <section id="input-zone" class="relative">
-            <label class="block font-display font-bold text-xl mb-4 ml-1">O QUE VAMOS CRIAR?</label>
+            <label class="block font-display font-bold text-2xl mb-6 ml-1 flex items-center gap-2">
+                <span class="inline-block w-2 h-8 bg-accent rounded"></span>
+                O QUE VAMOS CRIAR?
+            </label>
 
             <div class="relative">
                 <textarea id="urls-input" class="retro-input min-h-[150px] resize-y"
@@ -220,67 +275,75 @@
             </div>
 
             <!-- TOOLBAR -->
-            <div class="flex flex-wrap gap-4 mt-6 justify-between items-center">
-                <div class="flex flex-wrap gap-3">
-                    <input type="file" id="file-upload" class="hidden" accept=".txt,.csv">
-                    <button onclick="document.getElementById('file-upload').click()"
-                        class="btn-retro btn-tertiary text-sm">
-                        📂 CARREGAR ARQUIVO
-                    </button>
-                    <button onclick="pasteFromClipboard()" class="btn-retro btn-secondary text-sm">
-                        📋 COLAR
-                    </button>
-                    <button onclick="clearInput()"
-                        class="btn-retro btn-secondary text-sm hover:bg-red-100 hover:text-red-600">
-                        🗑️ LIMPAR
-                    </button>
-
-                    <!-- Hidden helpers -->
-                    <span id="url-count" class="hidden"></span>
-                    <span id="url-validation-badge" class="hidden"></span>
-                    <div id="validation-messages" class="hidden"></div>
-                </div>
-
-                <div class="flex flex-col gap-3">
-                    <!-- Seletor de Modelo de Prompt Dinâmico -->
-                    <div class="flex items-center gap-2">
-                        <label for="prompt-model-select" class="text-xs font-bold text-ink tracking-wide">MODELO DE
-                            PROMPT:</label>
-                        <select id="prompt-model-select"
-                            class="px-3 py-1.5 text-xs font-bold border-2 border-ink rounded bg-white hover:bg-base transition-colors cursor-pointer">
-                            <option value="">⏳ Carregando prompts...</option>
-                        </select>
-                        <div id="prompt-validation-indicator" class="flex items-center gap-1"
-                            title="Status de validação">
-                            <span id="prompt-status-icon"></span>
+            <div class="mt-8 space-y-4">
+                <!-- Prompt Selector Card -->
+                <div class="bg-white/80 backdrop-blur border-2 border-ink rounded-xl p-4 shadow-retro">
+                    <div class="flex items-center justify-between gap-4 flex-wrap">
+                        <div class="flex items-center gap-3 flex-1 min-w-[250px]">
+                            <span class="text-sm font-bold text-ink whitespace-nowrap">📋 MODELO:</span>
+                            <select id="prompt-model-select"
+                                class="flex-1 px-4 py-2.5 text-sm font-bold border-2 border-ink rounded-lg bg-white hover:bg-base transition-all cursor-pointer shadow-[2px_2px_0px_0px_#2D3436] hover:shadow-[3px_3px_0px_0px_#2D3436] hover:translate-x-[-1px] hover:translate-y-[-1px]">
+                                <option value="">⏳ Carregando prompts...</option>
+                            </select>
                         </div>
-                        <button onclick="showPromptInfo()"
-                            class="w-6 h-6 border-2 border-ink bg-sun hover:bg-accent hover:text-white font-bold rounded flex items-center justify-center text-xs transition-colors"
-                            title="Informações sobre o prompt selecionado">
-                            ?
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <div id="prompt-validation-indicator" class="flex items-center gap-1"
+                                title="Status de validação">
+                                <span id="prompt-status-icon"></span>
+                            </div>
+                            <button onclick="showPromptInfo()"
+                                class="w-8 h-8 border-2 border-ink bg-sun hover:bg-accent hover:text-white font-bold rounded-lg flex items-center justify-center text-sm transition-all shadow-[2px_2px_0px_0px_#2D3436] hover:shadow-[3px_3px_0px_0px_#2D3436]"
+                                title="Informações sobre o prompt selecionado">
+                                ℹ️
+                            </button>
+                        </div>
                     </div>
+
                     <!-- Informações do Prompt Selecionado -->
-                    <div id="prompt-info" class="hidden text-xs bg-base border-2 border-ink rounded p-2">
-                        <div id="prompt-description" class="text-ink"></div>
-                        <div id="prompt-validation-details" class="mt-1 text-xs"></div>
+                    <div id="prompt-info" class="hidden mt-3 text-sm bg-base/50 border-2 border-ink/20 rounded-lg p-3">
+                        <div id="prompt-description" class="text-ink font-medium"></div>
+                        <div id="prompt-validation-details" class="mt-2 text-xs text-ink/70"></div>
                     </div>
 
                     <!-- Aviso de prompt inválido -->
                     <div id="invalid-prompt-warning"
-                        class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-4 text-sm">
+                        class="hidden mt-3 bg-red-100 border-2 border-red-400 text-red-700 px-4 py-2 rounded-lg text-sm font-medium">
+                    </div>
+                </div>
+
+                <!-- Action Buttons Row -->
+                <div class="flex flex-wrap gap-3 justify-between items-center">
+                    <!-- File Actions -->
+                    <div class="flex flex-wrap gap-2">
+                        <input type="file" id="file-upload" class="hidden" accept=".txt,.csv">
+                        <button onclick="document.getElementById('file-upload').click()"
+                            class="btn-retro btn-tertiary text-sm">
+                            📂 ARQUIVO
+                        </button>
+                        <button onclick="pasteFromClipboard()" class="btn-retro btn-secondary text-sm">
+                            📋 COLAR
+                        </button>
+                        <button onclick="clearInput()"
+                            class="btn-retro btn-secondary text-sm hover:bg-red-100 hover:text-red-600 hover:border-red-600">
+                            🗑️ LIMPAR
+                        </button>
+
+                        <!-- Hidden helpers -->
+                        <span id="url-count" class="hidden"></span>
+                        <span id="url-validation-badge" class="hidden"></span>
+                        <div id="validation-messages" class="hidden"></div>
                     </div>
 
-                    <div class="flex gap-4">
-                        <!-- Mode Toggle Hidden -->
+                    <!-- Process Button -->
+                    <div class="flex gap-3">
                         <button id="btn-process" onclick="startProcessing()"
-                            class="btn-retro btn-primary text-base px-8">
+                            class="btn-retro btn-primary text-base px-10 py-3 text-lg shadow-retro-hover">
                             <span id="btn-process-spinner" class="hidden animate-spin mr-2">⚡</span>
-                            PROCESSAR AGORA
+                            🚀 PROCESSAR
                         </button>
                         <button id="btn-cancel" onclick="cancelProcessing()"
-                            class="btn-retro btn-secondary hidden text-red-500 border-red-500">
-                            CANCELAR
+                            class="btn-retro btn-secondary hidden text-red-500 border-red-500 hover:bg-red-500 hover:text-white">
+                            ✖️ CANCELAR
                         </button>
                     </div>
                 </div>
@@ -288,70 +351,136 @@
         </section>
 
         <!-- PROCESSING SECTION -->
-        <section id="progress-card" class="hidden border-4 border-ink bg-white rounded-2xl p-8 shadow-retro">
-            <div class="flex justify-between items-end mb-6">
-                <div>
-                    <h2 class="font-display font-black text-3xl">TRABALHANDO...</h2>
-                    <p id="current-url" class="font-mono font-bold text-sm mt-1 text-secondary truncate max-w-md">
-                        INICIALIZANDO...</p>
+        <section id="progress-card" class="hidden space-y-6">
+            <!-- Current Processing -->
+            <div id="current-processing" class="border-4 border-ink bg-white rounded-2xl p-8 shadow-retro-hover">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex-1">
+                        <h2 class="font-display font-black text-2xl mb-2">🎬 PROCESSANDO AGORA</h2>
+                        <p id="current-url" class="font-mono font-bold text-sm text-ink/70 truncate">
+                            INICIALIZANDO...
+                        </p>
+                    </div>
+                    <button id="btn-cancel-current" onclick="cancelProcessing()"
+                        class="btn-retro btn-secondary text-red-500 border-red-500 hover:bg-red-500 hover:text-white ml-4">
+                        ✖️ CANCELAR
+                    </button>
                 </div>
-                <div class="text-right">
-                    <div id="progress-percent" class="font-display font-black text-6xl text-accent">0%</div>
+
+                <!-- Progress Bar -->
+                <div class="mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <span id="current-step" class="text-sm font-bold text-ink/70">Preparando...</span>
+                        <span id="progress-percent" class="font-display font-black text-2xl text-accent">0%</span>
+                    </div>
+                    <div class="w-full h-6 bg-base border-2 border-ink rounded-full overflow-hidden">
+                        <div id="progress-bar"
+                            class="h-full bg-pop border-r-2 border-ink transition-all duration-300 w-0">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6 border-t-2 border-ink pt-6">
+                    <div>
+                        <span class="block text-xs font-black text-secondary tracking-widest">TEMPO</span>
+                        <span id="elapsed-time" class="block font-mono font-bold text-xl">0s</span>
+                    </div>
+                    <div id="eta-container">
+                        <span class="block text-xs font-black text-secondary tracking-widest">ESTIMATIVA</span>
+                        <span id="eta-time" class="block font-mono font-bold text-xl">--</span>
+                    </div>
+
+                    <!-- Steps -->
+                    <div id="steps-indicator" class="col-span-2 flex items-center justify-between relative px-2">
+                        <div class="absolute w-full h-1 bg-ink -z-10"></div>
+                        <div id="step-extraction" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                        <div id="step-transcription" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                        <div id="step-summary" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                        <div id="step-report" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                    </div>
+                </div>
+
+                <!-- Logs -->
+                <div id="logs-card" class="hidden mt-8">
+                    <button onclick="toggleLogs()"
+                        class="text-xs font-bold font-mono border-2 border-ink px-2 py-1 bg-base hover:bg-accent hover:text-white transition-colors">
+                        TERMINAL >_
+                    </button>
+                    <div id="logs-content"
+                        class="hidden mt-2 bg-ink p-4 border-2 border-ink text-pop font-mono text-xs h-40 overflow-y-auto">
+                        <div id="logs-list"></div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Thick Bar -->
-            <div class="w-full h-6 bg-base border-2 border-ink rounded-full overflow-hidden mb-8">
-                <div id="progress-bar" class="h-full bg-pop border-r-2 border-ink transition-all duration-300 w-0">
+            <!-- Queue Display -->
+            <div id="queue-display" class="border-4 border-ink bg-white rounded-2xl p-6 shadow-retro">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-display font-black text-xl">📋 FILA DE PROCESSAMENTO</h3>
+                    <span id="queue-count" class="px-3 py-1 bg-sun border-2 border-ink rounded-lg font-bold text-sm">
+                        0 na fila
+                    </span>
                 </div>
-            </div>
-
-            <!-- Stats Grid -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 border-t-2 border-ink pt-6">
-                <div>
-                    <span class="block text-xs font-black text-secondary tracking-widest">TEMPO</span>
-                    <span id="elapsed-time" class="block font-mono font-bold text-xl">0s</span>
-                </div>
-                <div id="eta-container">
-                    <span class="block text-xs font-black text-secondary tracking-widest">ESTIMATIVA</span>
-                    <span id="eta-time" class="block font-mono font-bold text-xl">--</span>
-                </div>
-
-                <!-- Steps -->
-                <div id="steps-indicator" class="col-span-2 flex items-center justify-between relative px-2">
-                    <div class="absolute w-full h-1 bg-ink -z-10"></div>
-                    <div id="step-extraction" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
-                    <div id="step-transcription" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
-                    <div id="step-summary" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
-                    <div id="step-report" class="w-4 h-4 bg-white border-2 border-ink rounded-full"></div>
+                <div id="queue-list" class="space-y-2">
+                    <p class="text-sm text-ink/50 text-center py-4">Nenhum vídeo na fila</p>
                 </div>
             </div>
 
             <div id="status-badge" class="hidden"></div> <!-- Hidden logic container -->
-
-            <!-- Logs -->
-            <div id="logs-card" class="hidden mt-8">
-                <button onclick="toggleLogs()"
-                    class="text-xs font-bold font-mono border-2 border-ink px-2 py-1 bg-base hover:bg-accent hover:text-white transition-colors">
-                    TERMINAL >_
-                </button>
-                <div id="logs-content"
-                    class="hidden mt-2 bg-ink p-4 border-2 border-ink text-pop font-mono text-xs h-40 overflow-y-auto">
-                    <div id="logs-list"></div>
-                </div>
-            </div>
         </section>
 
         <!-- EXTENSION MANIFESTS SECTION -->
         <section id="extension-manifests-section" class="hidden">
             <div class="bg-white border-2 border-ink rounded-xl p-6 shadow-retro">
-                <div class="flex justify-between items-center mb-4">
+                <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
                     <h3 class="font-display font-bold text-lg">
                         🔗 Manifests Capturados (Extensão)
                     </h3>
-                    <button onclick="refreshManifests()" class="btn-retro btn-secondary text-xs">
-                        🔄 ATUALIZAR
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Dropdown de Limpeza -->
+                        <div class="relative inline-block">
+                            <button onclick="toggleCleanupDropdown()"
+                                class="btn-retro btn-secondary text-xs flex items-center gap-1"
+                                id="cleanup-dropdown-btn">
+                                🗑️ LIMPAR
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                                    <path d="M6 8L2 4h8z" />
+                                </svg>
+                            </button>
+                            <div id="cleanup-dropdown"
+                                class="hidden absolute right-0 mt-2 w-64 bg-white border-2 border-ink rounded-lg shadow-retro z-50">
+                                <div class="p-3">
+                                    <div class="text-xs font-bold text-ink mb-2">Limpar manifests:</div>
+
+                                    <!-- Opção por horas -->
+                                    <div class="flex items-center gap-2 mb-3 p-2 hover:bg-base rounded">
+                                        <input type="number" id="cleanup-hours" value="24" min="1" max="720"
+                                            class="w-16 px-2 py-1 text-xs font-bold border-2 border-ink rounded bg-white text-center">
+                                        <span class="text-xs text-ink">horas</span>
+                                        <button onclick="cleanupManifests(); toggleCleanupDropdown();"
+                                            class="btn-retro btn-tertiary text-xs px-2 py-1 ml-auto">
+                                            Limpar
+                                        </button>
+                                    </div>
+
+                                    <!-- Separador -->
+                                    <div class="border-t-2 border-ink/10 my-2"></div>
+
+                                    <!-- Opção limpar tudo -->
+                                    <button onclick="cleanupAllManifests();"
+                                        class="w-full text-left px-2 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded flex items-center gap-2">
+                                        <span>🗑️</span>
+                                        <span>Limpar TUDO (irreversível)</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="refreshManifests()" class="btn-retro btn-secondary text-xs">
+                            🔄 ATUALIZAR
+                        </button>
+                    </div>
                 </div>
                 <div id="manifests-list" class="space-y-3">
                     <p class="text-sm text-gray-500">Carregando...</p>
@@ -361,12 +490,12 @@
 
         <!-- LIBRARY SECTION -->
         <section class="animate-enter delay-2">
-            <div class="flex justify-between items-center mb-6">
+            <div class="flex justify-between items-center mb-8">
                 <h2
-                    class="font-display font-black text-3xl bg-sun px-3 transform -rotate-1 border-2 border-ink shadow-[2px_2px_0px_0px_#2D3436]">
-                    BIBLIOTECA</h2>
-                <input type="text" id="search-reports" placeholder="BUSCAR..."
-                    class="retro-input p-2 text-sm w-48 border-2">
+                    class="font-display font-black text-3xl bg-sun px-4 py-2 transform -rotate-1 border-2 border-ink shadow-[3px_3px_0px_0px_#2D3436] hover:shadow-retro-hover hover:-rotate-2 transition-all">
+                    📚 BIBLIOTECA</h2>
+                <input type="text" id="search-reports" placeholder="🔍 BUSCAR..."
+                    class="retro-input p-3 text-sm w-56 border-2">
             </div>
 
             <div id="reports-list" class="grid gap-4"></div>
@@ -455,7 +584,7 @@
         </div>
     </div>
 
-    <div id="toast-container" class="fixed bottom-8 right-8 z-50 flex flex-col gap-3"></div>
+    <div id="toast-container" class="fixed bottom-8 right-8 z-[9999] flex flex-col gap-3"></div>
 
     <!-- MODAL DE CONFIGURAÇÕES -->
     <div id="settings-modal" class="fixed inset-0 bg-ink/90 hidden items-center justify-center z-50">
@@ -680,11 +809,18 @@
                     <!-- Header do Editor -->
                     <div id="editor-header" class="p-4 border-b-2 border-ink bg-white hidden">
                         <div class="flex justify-between items-center">
-                            <div>
+                            <div class="flex items-center gap-3">
                                 <input type="text" id="prompt-name-input"
                                     class="font-display font-bold text-lg border-2 border-ink rounded px-2 py-1 w-64"
                                     placeholder="Nome do prompt (ex: modelo6)">
-                                <span id="prompt-status-badge" class="ml-3 text-sm"></span>
+                                <button id="validation-info-btn" onclick="openValidationModal()"
+                                    class="hidden px-3 py-1.5 border-2 border-red-600 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg text-xs transition-all hover:scale-105 shadow-md hover:shadow-lg flex items-center gap-1.5 animate-pulse"
+                                    title="Clique para ver os erros de validação">
+                                    <span class="text-base">⚠️</span>
+                                    <span id="validation-error-text">VER ERROS</span>
+                                </button>
+                                <span id="validation-success-badge"
+                                    class="hidden text-sm text-green-600 font-semibold">✅ Válido</span>
                             </div>
                             <div class="flex gap-2">
                                 <button onclick="saveCurrentPrompt()" class="btn-retro btn-primary text-sm">
@@ -696,7 +832,6 @@
                                 </button>
                             </div>
                         </div>
-                        <div id="prompt-info" class="mt-2 text-xs text-gray-500"></div>
                     </div>
 
                     <!-- Área do Editor Markdown -->
@@ -715,6 +850,18 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal de Validação -->
+    <div id="validation-modal" class="fixed inset-0 bg-ink/90 hidden items-center justify-center z-[9999]">
+        <div class="bg-white border-4 border-ink rounded-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto shadow-retro">
+            <div class="p-4 border-b-4 border-ink flex justify-between items-center bg-red-100 sticky top-0">
+                <h3 class="font-display font-black text-xl text-red-700">⚠️ ERROS DE VALIDAÇÃO</h3>
+                <button onclick="closeValidationModal()"
+                    class="w-8 h-8 border-2 border-ink bg-white hover:bg-red-500 hover:text-white font-bold rounded flex items-center justify-center">X</button>
+            </div>
+            <div id="validation-modal-content" class="p-6"></div>
         </div>
     </div>
 
@@ -740,6 +887,33 @@
             </div>
             <div id="manifests-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <p style="font-size: 0.875rem; color: #666;">Carregando...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação de Limpeza -->
+    <div id="cleanup-confirm-modal" class="hidden fixed inset-0 bg-ink/50 flex items-center justify-center z-[9999]">
+        <div
+            class="bg-base border-4 border-ink rounded-xl p-6 shadow-[8px_8px_0px_0px_#2D3436] max-w-md mx-4 animate-enter">
+            <div class="flex items-start gap-3 mb-4">
+                <div class="text-3xl" id="cleanup-modal-icon">⚠️</div>
+                <div class="flex-1">
+                    <h3 class="font-display font-bold text-lg text-ink mb-2" id="cleanup-modal-title">
+                        Confirmar Limpeza
+                    </h3>
+                    <p class="text-sm text-ink" id="cleanup-modal-message">
+                        Deseja continuar?
+                    </p>
+                </div>
+            </div>
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeCleanupModal(false)" class="btn-retro btn-secondary text-xs px-4 py-2">
+                    ❌ CANCELAR
+                </button>
+                <button onclick="closeCleanupModal(true)" class="btn-retro btn-primary text-xs px-4 py-2"
+                    id="cleanup-confirm-btn">
+                    ✅ CONFIRMAR
+                </button>
             </div>
         </div>
     </div>
@@ -828,8 +1002,10 @@
     </style>
 
     <!-- JavaScript Files -->
-    <script src="{{ url_for('static', filename='js/templates.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main_v2.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/templates.js') }}?v=20251221ac"></script>
+    <script src="{{ url_for('static', filename='js/main_v2.js') }}?v=20251221ac"></script>
+    <script src="/static/js/extension_manifests.js?v=20251221ac"></script>
 </body>
 
 </html>
+```

@@ -235,8 +235,45 @@ chrome.webRequest.onBeforeRequest.addListener(
   ["requestBody"]
 );
 
+// Variável para cache do estado de auto-capture
+let autoCaptureEnabled = true;
+// Set de tabIds que têm permissão temporária para captura manual
+let pendingManualCaptures = new Set();
+
+// Carregar estado de auto-capture ao iniciar
+chrome.storage.local.get(['autoCapture'], (result) => {
+  autoCaptureEnabled = result.autoCapture !== false; // padrão true
+  console.log('[Video Extractor] Auto-capture estado inicial:', autoCaptureEnabled);
+});
+
 // Função para capturar manifest
 function captureManifest(manifestUrl, tabId, source = 'unknown') {
+  // Garantir que tabId é número
+  const numericTabId = Number(tabId);
+
+  // Verificar se é uma captura manual autorizada
+  // IMPORTANTE: Relaxamos a verificação para permitir se EXISTIR qualquer captura pendente
+  // Isso resolve problemas onde o request vem de um Service Worker (tabId -1) ou frame diferente
+  const isPendingManual = pendingManualCaptures.size > 0;
+  const isExactMatch = pendingManualCaptures.has(numericTabId);
+
+  // Se tem pendência e o tabId é -1 ou inválido, assumimos que é o override
+  const isManualOverride = isExactMatch || (isPendingManual && (numericTabId === -1 || !tabId));
+
+  console.log(`[Video Extractor] Tentativa de captura - Tab: ${tabId}, Auto: ${autoCaptureEnabled}, Manual: ${isManualOverride} (Exact: ${isExactMatch}, AnyPending: ${isPendingManual})`);
+
+  // Verificar se auto-capture está habilitada ou se é override manual
+  if (!autoCaptureEnabled && !isManualOverride) {
+    console.log('[Video Extractor] ⏸️ Auto-capture desativada e sem permissão manual, ignorando manifest');
+    return;
+  }
+
+  if (isManualOverride) {
+    console.log(`[Video Extractor] 🔓 Captura manual autorizada!`);
+    // Opcional: remover a pendência após sucesso?
+    // Melhor não remover imediatamente para garantir que pegamos o manifest certo (às vezes vê vários)
+  }
+
   function normalizeManifest(u) {
     try {
       const url = String(u).trim().replace(/`/g, '');
@@ -280,10 +317,37 @@ function captureManifest(manifestUrl, tabId, source = 'unknown') {
   // Para outros players, sempre considerar válido
   const isValidManifest = isCloudflareJwt || source !== 'cloudflare';
 
+  // Função para normalizar URLs de páginas (evitar duplicatas)
+  function normalizePageUrl(url) {
+    try {
+      const urlObj = new URL(url);
+
+      // YouTube: manter apenas domínio + /watch + parâmetro v
+      if (urlObj.hostname.includes('youtube.com') && urlObj.pathname === '/watch') {
+        const videoId = urlObj.searchParams.get('v');
+        if (videoId) {
+          return `https://www.youtube.com/watch?v=${videoId}`;
+        }
+      }
+
+      // Vimeo: manter apenas domínio + path (sem query params)
+      if (urlObj.hostname.includes('vimeo.com')) {
+        return `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}`;
+      }
+
+      // Para outros sites, retornar URL original
+      return url;
+    } catch (e) {
+      return url;
+    }
+  }
+
   // Pegar a URL da página atual
   chrome.tabs.get(tabId, function (tab) {
     if (tab) {
-      const pageUrl = tab.url;
+      let pageUrl = tab.url;
+      // Normalizar URL da página (evitar duplicatas)
+      pageUrl = normalizePageUrl(pageUrl);
 
       // Ignorar se a página atual já é um manifest (evita duplicatas ao testar)
       if (pageUrl && (pageUrl.includes('.m3u8') || pageUrl.includes('.mpd') ||
@@ -444,6 +508,31 @@ chrome.storage.local.get(['manifests', 'lastManifest'], function (result) {
       startPolling(sess.pageUrl);
     }
   });
+});
+
+// Listener para quando abas são fechadas - remover manifests associados
+chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+  // Obter a URL da aba fechada é complicado, pois o tab já não existe
+  // Então vamos verificar quais manifests ainda têm abas abertas e limpar os órfãos
+  try {
+    const tabs = await chrome.tabs.query({});
+    const openUrls = new Set(tabs.map(t => t.url));
+
+    // Filtrar manifests que ainda têm abas abertas
+    const originalLength = manifests.length;
+    manifests = manifests.filter(m => openUrls.has(m.pageUrl));
+
+    if (manifests.length < originalLength) {
+      const removed = originalLength - manifests.length;
+      console.log(`[Video Extractor] 🧹 ${removed} manifest(s) removido(s) - aba(s) fechada(s)`);
+
+      // Atualizar storage e badge
+      chrome.storage.local.set({ manifests });
+      chrome.action.setBadgeText({ text: manifests.length > 0 ? manifests.length.toString() : '' });
+    }
+  } catch (e) {
+    console.error('[Video Extractor] Erro ao limpar manifests órfãos:', e);
+  }
 });
 
 // Listener para mensagens do popup
@@ -733,6 +822,35 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       }
     })();
     return true;
+  } else if (request.action === 'setAutoCapture') {
+    // Atualizar estado de auto-capture
+    autoCaptureEnabled = request.enabled;
+    console.log('[Video Extractor] Auto-capture atualizado:', autoCaptureEnabled);
+    sendResponse({ success: true });
+  } else if (request.action === 'expectManualCapture') {
+    // Autorizar captura manual para esta aba por 30s
+    if (request.tabId) {
+      pendingManualCaptures.add(request.tabId);
+      console.log(`[Video Extractor] 🔓 Aguardando captura manual na tab ${request.tabId}`);
+
+      // Feedback visual: Mudar badge para "REC" ou ícone de gravação
+      chrome.action.setBadgeText({ text: 'REC' });
+      chrome.action.setBadgeBackgroundColor({ color: '#FF9800' }); // Laranja/Amarelo
+
+      // Limpar após 30s
+      setTimeout(() => {
+        if (pendingManualCaptures.has(request.tabId)) {
+          pendingManualCaptures.delete(request.tabId);
+          // Restaurar badge original se não houver mais pendências
+          if (pendingManualCaptures.size === 0) {
+            chrome.action.setBadgeText({ text: manifests.length > 0 ? manifests.length.toString() : '' });
+            chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+          }
+        }
+      }, 30000);
+
+      sendResponse({ success: true });
+    }
   }
   // Don't return true for unhandled messages - let them fail naturally
 });

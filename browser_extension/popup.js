@@ -203,16 +203,27 @@ function loadManifests() {
                     // Recarregar a aba ativa
                     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                         if (tabs[0]) {
-                            chrome.tabs.reload(tabs[0].id);
+                            // Avisar background que vamos recarregar manualmente e queremos capturar
+                            console.log('Enviando expectManualCapture para tab:', tabs[0].id);
+                            chrome.runtime.sendMessage({
+                                action: 'expectManualCapture',
+                                tabId: tabs[0].id
+                            });
 
-                            // Mostrar modal informativo e fechar popup
+                            // Delay maior para garantir que a mensagem foi processada
                             setTimeout(() => {
-                                showInfoModal(
-                                    '✅ Página Recarregada!',
-                                    '📌 Aguarde o vídeo carregar e abra o popup novamente para ver o m3u8 capturado.',
-                                    () => window.close()
-                                );
-                            }, 300);
+                                console.log('Recarregando tab:', tabs[0].id);
+                                chrome.tabs.reload(tabs[0].id);
+
+                                // Mostrar modal informativo e fechar popup
+                                setTimeout(() => {
+                                    showInfoModal(
+                                        '✅ Página Recarregada!',
+                                        '📌 A captura foi autorizada manualmente.\nAguarde o vídeo carregar.',
+                                        () => window.close()
+                                    );
+                                }, 300);
+                            }, 200);
                         }
                     });
                 });
@@ -562,6 +573,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Only load content if API is available
     if (!apiAvailable) {
         return;
+    }
+
+    // Auto-Capture Toggle - carregar estado salvo e configurar listener
+    const autoCaptureCheckbox = document.getElementById('autoCaptureCheckbox');
+    if (autoCaptureCheckbox) {
+        // Carregar estado salvo (padrão: ativado)
+        const savedState = await chrome.storage.local.get(['autoCapture']);
+        const isEnabled = savedState.autoCapture !== false; // padrão true se não definido
+        autoCaptureCheckbox.checked = isEnabled;
+
+        // Listener para salvar mudanças
+        autoCaptureCheckbox.addEventListener('change', async () => {
+            const enabled = autoCaptureCheckbox.checked;
+            await chrome.storage.local.set({ autoCapture: enabled });
+            console.log('[Video Processor] Auto-captura:', enabled ? 'ativada' : 'desativada');
+
+            // Notificar background script
+            chrome.runtime.sendMessage({ action: 'setAutoCapture', enabled });
+        });
     }
 
     // Carregar prompts disponíveis

@@ -7,7 +7,34 @@ console.log('[Video Extractor] Content script carregado');
 function extractVideoTitle() {
     // Tentar várias estratégias para encontrar o título
     const strategies = [
-        // 1. Kiwify - título da aula (h3) + curso (h2)
+        // 1. YouTube - seletores específicos
+        () => {
+            if (window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be')) {
+                // YouTube Watch page - título principal do vídeo
+                const ytTitle = document.querySelector('yt-formatted-string.ytd-watch-metadata h1 yt-formatted-string')?.textContent?.trim()
+                    || document.querySelector('h1.ytd-watch-metadata yt-formatted-string')?.textContent?.trim()
+                    || document.querySelector('h1.title')?.textContent?.trim()
+                    || document.querySelector('yt-formatted-string[class*="title"]')?.textContent?.trim()
+                    || document.querySelector('#title h1')?.textContent?.trim()
+                    || document.querySelector('#container h1.title')?.textContent?.trim()
+                    || document.querySelector('ytd-video-primary-info-renderer h1')?.textContent?.trim();
+
+                // YouTube Shorts - título pode estar em diferentes lugares
+                const shortsTitle = document.querySelector('[id="video-title"]')?.textContent?.trim()
+                    || document.querySelector('ytd-reel-video-renderer h2')?.textContent?.trim();
+
+                if (ytTitle && ytTitle.length > 0) {
+                    console.log('[Video Extractor] YouTube título:', ytTitle);
+                    return ytTitle;
+                }
+                if (shortsTitle && shortsTitle.length > 0) {
+                    console.log('[Video Extractor] YouTube Shorts título:', shortsTitle);
+                    return shortsTitle;
+                }
+            }
+            return null;
+        },
+        // 2. Kiwify - título da aula (h3) + curso (h2)
         () => {
             if (window.location.hostname.includes('kiwify.com')) {
                 const lessonTitle = document.querySelector('article#lesson__metadata h3')?.textContent?.trim();
@@ -22,7 +49,7 @@ function extractVideoTitle() {
             }
             return null;
         },
-        // 2. Hub.la - título abaixo do vídeo
+        // 3. Hub.la - título abaixo do vídeo
         () => {
             if (window.location.hostname.includes('hub.la')) {
                 const h1 = document.querySelector('h1');
@@ -35,15 +62,15 @@ function extractVideoTitle() {
             }
             return null;
         },
-        // 3. Meta tag Open Graph
+        // 4. Meta tag Open Graph
         () => document.querySelector('meta[property="og:title"]')?.content,
-        // 4. Meta tag Twitter
+        // 5. Meta tag Twitter
         () => document.querySelector('meta[name="twitter:title"]')?.content,
-        // 5. Primeiro H1 da página
+        // 6. Primeiro H1 da página
         () => document.querySelector('h1')?.textContent?.trim(),
-        // 6. Título da página
+        // 7. Título da página
         () => document.title,
-        // 7. Seletores comuns de plataformas de curso
+        // 8. Seletores comuns de plataformas de curso
         () => document.querySelector('.video-title')?.textContent?.trim(),
         () => document.querySelector('.lesson-title')?.textContent?.trim(),
         () => document.querySelector('.course-title')?.textContent?.trim(),
@@ -67,8 +94,22 @@ function extractVideoTitle() {
 // Função para extrair links de material de apoio
 function extractSupportMaterials() {
     const materials = [];
-    const keywords = ['material', 'apoio', 'download', 'pdf', 'arquivo', 'recurso', 'anexo', 'documento'];
+    const keywords = ['material', 'apoio', 'pdf', 'arquivo', 'recurso', 'anexo', 'documento'];
     const extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.zip', '.rar', '.ppt', '.pptx'];
+
+    // Domínios a ignorar (plataformas de vídeo, redes sociais, ads)
+    const ignoredDomains = [
+        'youtube.com', 'youtu.be', 'googlevideo.com', 'googleadservices.com',
+        'google.com', 'gstatic.com', 'googleapis.com', 'doubleclick.net',
+        'facebook.com', 'twitter.com', 'instagram.com', 'tiktok.com',
+        'vimeo.com', 'cloudflarestream.com', 'snapchat.com', 'snap.com'
+    ];
+
+    // Se estamos no YouTube, não buscar materiais de apoio (não faz sentido)
+    if (window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be')) {
+        console.log('[Video Extractor] YouTube detectado - pulando busca de materiais de apoio');
+        return [];
+    }
 
     // Kiwify - buscar na seção de descrição da aula
     if (window.location.hostname.includes('kiwify.com')) {

@@ -22,9 +22,162 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     setupWebSocket();
 
+    // Verificar se há processamento ativo e restaurar estado
+    checkProcessingOnLoad();
+
     // Mostrar modal "O que há de novo" na primeira visita
     showWhatsNewIfFirstVisit();
 });
+
+// ===== RECUPERAÇÃO DE ESTADO DE PROCESSAMENTO =====
+async function checkProcessingOnLoad() {
+    try {
+        const response = await fetch('/api/status');
+        const status = await response.json();
+
+        console.log('🔍 Verificando estado de processamento:', status);
+
+        if (status.is_processing || status.processing) {
+            console.log('✅ Processamento ativo detectado - restaurando UI');
+
+            // Desabilitar botões e inputs
+            const btnProcess = document.getElementById('btn-process');
+            const btnCancel = document.getElementById('btn-cancel');
+            const urlsInput = document.getElementById('urls-input');
+
+            if (btnProcess) {
+                btnProcess.disabled = true;
+                btnProcess.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+            if (btnCancel) {
+                btnCancel.disabled = false;
+                btnCancel.classList.remove('hidden');
+            }
+            if (urlsInput) {
+                urlsInput.disabled = true;
+            }
+
+            // Mostrar seção de progresso e terminal
+            const progressCard = document.getElementById('progress-card');
+            const inputSection = document.getElementById('input-zone');
+            const logsCard = document.getElementById('logs-card');
+
+            if (progressCard && inputSection) {
+                progressCard.classList.remove('hidden');
+                inputSection.classList.add('hidden');
+            }
+
+            // Mostrar terminal de logs
+            if (logsCard) {
+                logsCard.classList.remove('hidden');
+                // Também mostrar o conteúdo dos logs se estiver colapsado
+                const logsContent = document.getElementById('logs-content');
+                if (logsContent) {
+                    logsContent.classList.remove('hidden');
+                }
+            }
+
+            // Atualizar UI com estado atual (inclui fila)
+            updateProgressFromStatus(status);
+
+            // Iniciar timer se houver tempo decorrido
+            if (!startTime && !timerInterval) {
+                startTime = Date.now() - (status.elapsed_time || 0) * 1000;
+                timerInterval = setInterval(updateTimer, 1000);
+            }
+
+            // Iniciar polling de status
+            startStatusPolling();
+        } else {
+            // Garantir que botões estejam habilitados quando não está processando
+            const btnProcess = document.getElementById('btn-process');
+            const btnCancel = document.getElementById('btn-cancel');
+            const urlsInput = document.getElementById('urls-input');
+
+            if (btnProcess) {
+                btnProcess.disabled = false;
+                btnProcess.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+            if (btnCancel) {
+                btnCancel.classList.add('hidden');
+            }
+            if (urlsInput) {
+                urlsInput.disabled = false;
+            }
+        }
+    } catch (error) {
+        console.error('❌ Erro ao verificar estado de processamento:', error);
+    }
+}
+
+function updateProgressFromStatus(status) {
+    // Atualizar porcentagem
+    const progressPercent = document.getElementById('progress-percent');
+    const progressBar = document.getElementById('progress-bar');
+    if (progressPercent && progressBar) {
+        const percent = status.progress || 0;
+        progressPercent.textContent = `${percent}%`;
+        progressBar.style.width = `${percent}%`;
+    }
+
+    // Atualizar URL atual
+    const currentUrl = document.getElementById('current-url');
+    if (currentUrl && status.current_url) {
+        currentUrl.textContent = status.current_url;
+    }
+
+    // Atualizar step atual
+    const currentStep = document.getElementById('current-step');
+    if (currentStep && status.current_step && status.current_step !== 'idle') {
+        currentStep.textContent = status.current_step;
+    }
+
+    // Atualizar estatísticas
+    const processedCount = document.getElementById('processed-count');
+    const failedCount = document.getElementById('failed-count');
+    const totalCount = document.getElementById('total-count');
+
+    if (processedCount) processedCount.textContent = status.current_video || 0;
+    if (failedCount) failedCount.textContent = status.failed_videos || 0;
+    if (totalCount) totalCount.textContent = status.total_videos || 0;
+
+    // Atualizar terminal se houver step atual
+    if (status.current_step && status.current_step !== 'idle') {
+        addLog(`📌 ${status.current_step}`, 'info');
+    }
+
+    // Atualizar fila se disponível
+    if (status.queue) {
+        updateQueueDisplay(status.queue, status.current_url);
+    }
+}
+
+let statusPollingInterval = null;
+
+function startStatusPolling() {
+    // Limpar polling anterior se existir
+    if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+    }
+
+    // Polling a cada 2 segundos
+    statusPollingInterval = setInterval(async () => {
+        try {
+            const response = await fetch('/api/status');
+            const status = await response.json();
+
+            if (status.is_processing || status.processing) {
+                updateProgressFromStatus(status);
+            } else {
+                // Processamento concluído
+                clearInterval(statusPollingInterval);
+                statusPollingInterval = null;
+            }
+        } catch (error) {
+            console.error('Erro no polling de status:', error);
+        }
+    }, 2000);
+}
 
 // ===== GERENCIAMENTO DE PROMPTS =====
 let availablePrompts = [];
@@ -314,12 +467,85 @@ function setupWebSocket() {
         showToast('Processamento cancelado', 'warning');
     });
 
+    socket.on('queue_updated', (data) => {
+        console.log('📋 Fila atualizada:', data);
+        updateQueueDisplay(data.queue, data.current);
+    });
+
     // Eventos de etapa (se implementados no backend)
     socket.on('step_update', (data) => {
         updateStepIndicator(data.step);
         addLog(`📌 Etapa: ${data.step} - ${data.message || ''}`, 'info');
     });
 }
+
+// Atualizar display da fila
+function updateQueueDisplay(queue, currentUrl) {
+    console.log('🔍 updateQueueDisplay chamada:', { queue, currentUrl, queueLength: queue?.length });
+
+    const queueList = document.getElementById('queue-list');
+    const queueCount = document.getElementById('queue-count');
+
+    if (!queueList || !queueCount) {
+        console.warn('⚠️ Elementos queue-list ou queue-count não encontrados');
+        return;
+    }
+
+    // Atualizar contador
+    const count = queue ? queue.length : 0;
+    queueCount.textContent = count === 0 ? 'Fila vazia' : `${count} na fila`;
+
+    console.log(`📊 Atualizando fila: ${count} itens`);
+
+    // Limpar lista
+    queueList.innerHTML = '';
+
+    if (count === 0) {
+        queueList.innerHTML = '<p class="text-sm text-ink/50 text-center py-4">Nenhum vídeo na fila</p>';
+        return;
+    }
+
+    // Adicionar itens da fila
+    queue.forEach((url, index) => {
+        console.log(`  ${index + 1}. ${url}`);
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between p-3 bg-base/50 border-2 border-ink rounded-lg hover:bg-base transition-colors';
+        item.innerHTML = `
+            <div class="flex-1 min-w-0">
+                <span class="font-bold text-sm mr-2">${index + 1}.</span>
+                <span class="font-mono text-xs truncate">${url}</span>
+            </div>
+            <button onclick="removeFromQueue('${url.replace(/'/g, "\\'")}')\" 
+                class="btn-retro btn-secondary text-xs px-2 py-1 ml-2 hover:bg-red-100 hover:text-red-600 hover:border-red-600 flex-shrink-0">
+                🗑️ REMOVER
+            </button>
+        `;
+        queueList.appendChild(item);
+    });
+}
+
+// Remover item da fila
+async function removeFromQueue(url) {
+    try {
+        const response = await fetch('/api/queue/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast('Removido da fila', 'success');
+            addLog(`🗑️ Removido da fila: ${url}`, 'info');
+        } else {
+            showToast('Erro ao remover: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Erro ao remover da fila: ' + error.message, 'error');
+    }
+}
+
 
 // Validação de URLs em tempo real
 function validateURLs() {
@@ -539,9 +765,15 @@ async function startProcessing() {
     const promptModelSelect = document.getElementById('prompt-model-select');
     const promptModel = promptModelSelect ? promptModelSelect.value : 'modelo2';
 
+    // Obter nome do modelo selecionado
+    let modelName = 'Modelo 2 (Padrão)';
+    if (promptModelSelect) {
+        const selectedOption = promptModelSelect.options[promptModelSelect.selectedIndex];
+        modelName = selectedOption ? selectedOption.text : modelName;
+    }
+
     // Mostrar confirmação elegante
     const estimatedTime = estimateTime(urls.length);
-    const modelName = promptModel === 'modelo4' ? 'Modelo 4 (Híbrido)' : 'Modelo 2 (Padrão)';
     const confirmed = await showConfirmDialog(
         `Processar ${urls.length} vídeo(s)?`,
         `Tempo estimado: ${estimatedTime}\nModelo: ${modelName}`
@@ -730,6 +962,16 @@ function onProcessingComplete() {
 
     // Atualizar relatórios
     setTimeout(refreshReports, 1000);
+
+    // Notificar sistema de fila (extension_manifests.js)
+    if (typeof window.onVideoProcessingComplete === 'function') {
+        const urlsInput = document.getElementById('urls-input');
+        const processedUrl = urlsInput ? urlsInput.value : null;
+        if (processedUrl) {
+            console.log('[Main] Notificando conclusão para fila:', processedUrl);
+            window.onVideoProcessingComplete(processedUrl);
+        }
+    }
 }
 
 // Atualizar progresso
@@ -1162,7 +1404,48 @@ function setupSettingsChangeListeners() {
 
 // Modal de confirmação customizado para a web
 function showConfirmDialog(title, message, onConfirm, onCancel) {
-    // Criar overlay do modal
+    // Se chamado com apenas 2 argumentos (title, message), retornar Promise
+    if (arguments.length === 2) {
+        return new Promise((resolve) => {
+            // Criar overlay do modal
+            const overlay = document.createElement('div');
+            overlay.id = 'confirm-dialog-overlay';
+            overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]';
+
+            overlay.innerHTML = `
+                <div class="bg-white border-4 border-ink rounded-2xl p-6 max-w-md mx-4 shadow-retro transform scale-100">
+                    <h3 class="font-display font-bold text-xl mb-3">${title}</h3>
+                    <p class="text-ink mb-6 whitespace-pre-line">${message}</p>
+                    <div class="flex gap-3 justify-end">
+                        <button id="confirm-dialog-cancel" class="btn-retro btn-secondary px-4 py-2">Não</button>
+                        <button id="confirm-dialog-ok" class="btn-retro btn-primary px-4 py-2">Sim</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            const handleConfirm = () => {
+                overlay.remove();
+                resolve(true);
+            };
+
+            const handleCancel = () => {
+                overlay.remove();
+                resolve(false);
+            };
+
+            document.getElementById('confirm-dialog-ok').addEventListener('click', handleConfirm);
+            document.getElementById('confirm-dialog-cancel').addEventListener('click', handleCancel);
+
+            // Fechar ao clicar fora
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) handleCancel();
+            });
+        });
+    }
+
+    // Modo legado com callbacks (para compatibilidade)
     const overlay = document.createElement('div');
     overlay.id = 'confirm-dialog-overlay';
     overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]';
@@ -1599,6 +1882,12 @@ function closePromptsModal() {
         easyMDE = null;
     }
 
+    // Limpar textarea para evitar conteúdo persistente
+    const textarea = document.getElementById('prompt-editor');
+    if (textarea) {
+        textarea.value = '';
+    }
+
     // Resetar UI
     document.getElementById('editor-header').classList.add('hidden');
     document.getElementById('editor-container').classList.add('hidden');
@@ -1647,7 +1936,7 @@ async function loadPromptsList() {
     }
 }
 
-function createNewPrompt() {
+async function createNewPrompt() {
     currentEditingPrompt = null;
     isNewPrompt = true;
 
@@ -1658,16 +1947,36 @@ function createNewPrompt() {
 
     // Configurar campos
     const nameInput = document.getElementById('prompt-name-input');
-    nameInput.value = '';
+    nameInput.value = 'meu_prompt';
     nameInput.disabled = false;
-    nameInput.focus();
+    nameInput.select(); // Selecionar o texto para facilitar substituição
 
     document.getElementById('prompt-status-badge').innerHTML = '<span class="text-blue-600">🆕 Novo prompt</span>';
-    document.getElementById('prompt-info').textContent = 'Preencha o nome e conteúdo do novo prompt';
+    document.getElementById('prompt-info').textContent = '⏳ Carregando template...';
     document.getElementById('delete-prompt-btn').classList.add('hidden');
 
-    // Inicializar ou limpar editor
-    initEasyMDE('');
+    // Carregar template do servidor
+    try {
+        const response = await fetch('/api/prompt/template');
+        const data = await response.json();
+
+        if (data.error) {
+            // Fallback: template vazio se não encontrar
+            console.warn('Template não encontrado, usando vazio');
+            initEasyMDE('');
+            document.getElementById('prompt-info').textContent = 'Preencha o nome e conteúdo do novo prompt';
+        } else {
+            // Inicializar editor com template
+            initEasyMDE(data.content);
+            document.getElementById('prompt-info').textContent = `📄 Template carregado (${data.size} caracteres)`;
+        }
+    } catch (e) {
+        console.error('Erro ao carregar template:', e);
+        // Fallback: template vazio em caso de erro
+        initEasyMDE('');
+        document.getElementById('prompt-info').textContent = 'Preencha o nome e conteúdo do novo prompt';
+        showToast('Aviso: Template não pôde ser carregado', 'warning');
+    }
 
     // Atualizar lista visual
     loadPromptsList();
@@ -1701,14 +2010,25 @@ async function editPrompt(name) {
         const validationResp = await fetch(`/prompts/${name}`);
         const validationData = await validationResp.json();
 
-        const statusBadge = document.getElementById('prompt-status-badge');
+        const validationInfoBtn = document.getElementById('validation-info-btn');
+        const validationErrorText = document.getElementById('validation-error-text');
+        const validationSuccessBadge = document.getElementById('validation-success-badge');
+
         if (validationData.validation?.valid) {
-            statusBadge.innerHTML = '<span class="text-green-600">✅ Válido</span>';
+            validationInfoBtn.classList.add('hidden');
+            validationSuccessBadge.classList.remove('hidden');
+            window.currentValidationData = null;
         } else {
-            statusBadge.innerHTML = `<span class="text-red-600">❌ Inválido (${validationData.validation?.sections_found || 0}/14 seções)</span>`;
+            // Mostrar botão de erro com contagem
+            const sectionsFound = validationData.validation?.sections_found || 0;
+            validationErrorText.textContent = `${14 - sectionsFound} ERROS`;
+            validationInfoBtn.classList.remove('hidden');
+            validationSuccessBadge.classList.add('hidden');
+
+            // Armazenar dados de validação para o modal
+            window.currentValidationData = validationData.validation;
         }
 
-        document.getElementById('prompt-info').textContent = `📄 ${data.size} caracteres`;
         document.getElementById('delete-prompt-btn').classList.remove('hidden');
 
         // Inicializar editor com conteúdo
@@ -1720,6 +2040,67 @@ async function editPrompt(name) {
         console.error('Erro ao carregar prompt:', e);
         showToast('Erro ao carregar prompt', 'error');
     }
+}
+
+// Abrir modal de validação
+function openValidationModal() {
+    if (!window.currentValidationData) return;
+
+    const modal = document.getElementById('validation-modal');
+    const content = document.getElementById('validation-modal-content');
+    const data = window.currentValidationData;
+
+    // Construir mensagem de ajuda detalhada
+    let helpMessage = `<div class="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-4">`;
+    helpMessage += `<div class="font-bold text-red-700 mb-3 text-lg">⚠️ Este prompt não pode ser usado para processamento</div>`;
+
+    // Mostrar seções faltantes
+    if (data.missing_sections?.length > 0) {
+        helpMessage += `<div class="mb-3"><strong class="text-base">Seções faltantes (${data.missing_sections.length}/14):</strong></div>`;
+        helpMessage += `<ul class="list-disc list-inside mb-3 text-red-600 space-y-1">`;
+        data.missing_sections.forEach(section => {
+            helpMessage += `<li>${section}</li>`;
+        });
+        helpMessage += `</ul>`;
+    }
+
+    // Mostrar erro geral se houver
+    if (data.error) {
+        helpMessage += `<div class="mb-3 p-3 bg-red-200 border border-red-400 rounded"><strong>Erro:</strong> ${data.error}</div>`;
+    }
+
+    // Mostrar tipos inválidos se houver
+    if (data.invalid_types?.length > 0) {
+        helpMessage += `<div class="mb-3"><strong>Tipos inválidos:</strong></div>`;
+        helpMessage += `<ul class="list-disc list-inside mb-3 text-red-600">`;
+        data.invalid_types.forEach(error => {
+            helpMessage += `<li>${error}</li>`;
+        });
+        helpMessage += `</ul>`;
+    }
+
+    helpMessage += `</div>`;
+
+    // Orientação de como corrigir
+    helpMessage += `<div class="p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">`;
+    helpMessage += `<div class="font-bold text-blue-700 mb-3 text-lg">💡 Como corrigir:</div>`;
+    helpMessage += `<ol class="list-decimal list-inside space-y-2 text-blue-900">`;
+    helpMessage += `<li>Adicione um bloco <code class="bg-blue-200 px-2 py-1 rounded">\`\`\`json</code> com a estrutura de saída esperada</li>`;
+    helpMessage += `<li>Certifique-se de incluir todas as 14 seções obrigatórias no JSON</li>`;
+    helpMessage += `<li>Use o template como referência (clique em "➕ NOVO PROMPT" para ver o exemplo completo)</li>`;
+    helpMessage += `</ol>`;
+    helpMessage += `</div>`;
+
+    content.innerHTML = helpMessage;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// Fechar modal de validação
+function closeValidationModal() {
+    const modal = document.getElementById('validation-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
 }
 
 function initEasyMDE(content) {
@@ -1899,6 +2280,12 @@ async function deleteCurrentPrompt() {
             if (easyMDE) {
                 easyMDE.toTextArea();
                 easyMDE = null;
+            }
+
+            // Limpar textarea para evitar conteúdo persistente
+            const textarea = document.getElementById('prompt-editor');
+            if (textarea) {
+                textarea.value = '';
             }
 
             // Mostrar placeholder
