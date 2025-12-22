@@ -1,11 +1,282 @@
 // Script do popup - Video Processor Pro Extension
 
+// Função reutilizável para lidar com clique de copiar
+function handleCopyClick(event) {
+    const btn = event.currentTarget;
+    const url = btn.getAttribute('data-url');
+
+    if (!url) return;
+
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✅ Copiado!';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+            }, 2000);
+        }).catch(err => {
+            console.warn('Clipboard API failed, trying fallback:', err);
+            copyToClipboardFallback(url, btn);
+        });
+    } else {
+        copyToClipboardFallback(url, btn);
+    }
+}
+
+// Função de confirmação com modal customizado (estilo do sistema)
+function showPopupConfirmModal(title, message) {
+    return new Promise((resolve) => {
+        // Criar overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        `;
+
+        overlay.innerHTML = `
+            <div style="
+                background: white;
+                border: 3px solid #2D3436;
+                border-radius: 12px;
+                padding: 0;
+                max-width: 320px;
+                width: 90%;
+                box-shadow: 6px 6px 0px 0px #2D3436;
+                overflow: hidden;
+            ">
+                <div style="
+                    background: linear-gradient(135deg, #FF6B6B, #ff8a80);
+                    padding: 12px 16px;
+                    border-bottom: 3px solid #2D3436;
+                ">
+                    <h3 style="
+                        font-family: 'Space Grotesk', sans-serif;
+                        font-weight: 700;
+                        color: white;
+                        margin: 0;
+                        font-size: 14px;
+                        text-shadow: 1px 1px 0 #2D3436;
+                    ">${title}</h3>
+                </div>
+                <div style="padding: 16px;">
+                    <p style="
+                        font-size: 12px;
+                        color: #2D3436;
+                        margin: 0 0 16px 0;
+                        line-height: 1.5;
+                    ">${message}</p>
+                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                        <button id="modal-cancel-btn" style="
+                            padding: 8px 16px;
+                            border: 2px solid #2D3436;
+                            border-radius: 6px;
+                            background: #e0e0e0;
+                            color: #2D3436;
+                            font-weight: 600;
+                            font-size: 11px;
+                            cursor: pointer;
+                            box-shadow: 2px 2px 0px 0px #2D3436;
+                        ">Cancelar</button>
+                        <button id="modal-confirm-btn" style="
+                            padding: 8px 16px;
+                            border: 2px solid #2D3436;
+                            border-radius: 6px;
+                            background: #FF6B6B;
+                            color: white;
+                            font-weight: 600;
+                            font-size: 11px;
+                            cursor: pointer;
+                            box-shadow: 2px 2px 0px 0px #2D3436;
+                        ">Confirmar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('#modal-cancel-btn').addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            resolve(false);
+        });
+
+        overlay.querySelector('#modal-confirm-btn').addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            resolve(true);
+        });
+    });
+}
+
+// Função para abrir o relatório (consistente com library.js)
+window.viewReport = function (domain, id) {
+    const viewUrl = `http://127.0.0.1:5000/view/${encodeURIComponent(domain)}/${encodeURIComponent(id)}`;
+    chrome.tabs.create({ url: viewUrl });
+};
+
+// Funções para cancelar/remover da fila na aba Captura
+async function cancelProcessingFromCapture(url) {
+    const confirmed = await showPopupConfirmModal(
+        '❌ Cancelar Processamento?',
+        'Tem certeza que deseja cancelar o processamento deste vídeo?'
+    );
+    if (!confirmed) return;
+
+    try {
+        const API_HOSTS = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+        for (const host of API_HOSTS) {
+            try {
+                const response = await fetch(`${host}/api/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (response.ok) {
+                    showToast('Processamento cancelado!', 'success');
+                    loadManifests(); // Recarregar aba Captura
+                    break;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+    } catch (e) {
+        console.error('Erro ao cancelar:', e);
+        showToast('Erro ao cancelar processamento', 'error');
+    }
+}
+
+async function removeFromQueueCapture(url) {
+    const confirmed = await showPopupConfirmModal(
+        '🗑️ Remover da Fila?',
+        'Tem certeza que deseja remover este vídeo da fila de processamento?'
+    );
+    if (!confirmed) return;
+
+    try {
+        const API_HOSTS = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+        for (const host of API_HOSTS) {
+            try {
+                const response = await fetch(`${host}/api/queue/remove`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                if (response.ok) {
+                    showToast('Removido da fila!', 'success');
+                    loadManifests(); // Recarregar aba Captura
+                    if (currentActiveTab === 'manifests') loadAllManifestsTab();
+                    break;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+    } catch (e) {
+        console.error('Erro ao remover da fila:', e);
+        showToast('Erro ao remover da fila', 'error');
+    }
+}
+
+// Funções para aba Manifests (reutilizáveis e compatíveis com delegação)
+async function deleteManifestAction(pageUrl) {
+    const confirmed = await showPopupConfirmModal(
+        '🗑️ Excluir Manifest?',
+        'Tem certeza que deseja excluir este manifest capturado?'
+    );
+    if (confirmed) {
+        chrome.runtime.sendMessage({ action: 'removeManifest', pageUrl }, () => {
+            if (chrome.runtime.lastError) console.warn('Port closed during removeManifest:', chrome.runtime.lastError.message);
+            loadAllManifestsTab();
+            if (currentActiveTab === 'capture') loadManifests();
+        });
+    }
+}
+
+async function processManifestAction(pageUrl, btnElement) {
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = '⏳ Iniciando...';
+    }
+
+    try {
+        const API_HOSTS = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+        for (const host of API_HOSTS) {
+            try {
+                const response = await fetch(`${host}/api/process`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ urls: [pageUrl] })
+                });
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.added_to_queue) {
+                        showToast(`Adicionado à fila (posição ${result.queue_position || '?'})`, 'info');
+                    } else {
+                        showToast('Processamento iniciado!', 'success');
+                    }
+                    setTimeout(() => loadAllManifestsTab(), 500);
+                    break;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+    } catch (e) {
+        console.error('Erro ao iniciar processamento:', e);
+        showToast('Erro ao iniciar processamento', 'error');
+        loadAllManifestsTab();
+    }
+}
+
+async function cancelProcessingAction(pageUrl) {
+    const confirmed = await showPopupConfirmModal(
+        '❌ Cancelar Processamento?',
+        'Tem certeza que deseja cancelar o processamento deste vídeo?'
+    );
+    if (confirmed) {
+        try {
+            const API_HOSTS = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+            for (const host of API_HOSTS) {
+                try {
+                    const response = await fetch(`${host}/api/cancel`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (response.ok) {
+                        showToast('Processamento cancelado!', 'success');
+                        loadAllManifestsTab();
+                        if (currentActiveTab === 'capture') loadManifests();
+                        break;
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+        } catch (e) {
+            console.error('Erro ao cancelar:', e);
+            showToast('Erro ao cancelar processamento', 'error');
+        }
+    }
+}
+
 function loadManifests() {
     // Obter URL da aba atual para destacar
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const currentTabUrl = tabs[0]?.url || '';
 
         chrome.runtime.sendMessage({ action: 'getManifests' }, function (response) {
+            if (chrome.runtime.lastError) {
+                console.warn('[Video Extractor] Falha ao obter manifests:', chrome.runtime.lastError.message);
+                return;
+            }
             const allManifests = response.manifests || [];
             const listDiv = document.getElementById('manifestList');
 
@@ -103,7 +374,7 @@ function loadManifests() {
 
 
                 return `
-                <div class="manifest-item" style="border-left: 4px solid ${minutesAgo > 1 ? '#ff9800' : '#4CAF50'}">
+                <div class="manifest-item" style="border-left: 4px solid ${minutesAgo > 1 ? '#ff9800' : '#4CAF50'}" data-page-url="${m.pageUrl}">
                     <div class="manifest-domain">🌐 ${m.domain}</div>
                     <div class="manifest-video-title" style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 13px;">
                         🎬 ${videoTitle}
@@ -118,7 +389,9 @@ function loadManifests() {
                         📅 ${formatTime(m.timestamp)} (${timeText})
                     </div>
                     ${materialsHtml}
-                    <div class="manifest-actions" style="margin-top: 10px;">
+                    
+                    <!-- Área de ações - será atualizada após verificar relatório -->
+                    <div class="manifest-actions" style="margin-top: 10px;" data-actions-for="${m.pageUrl}">
                         <button class="btn btn-info btn-sm refresh-btn" 
                                 title="Recarregar informações da página (título, materiais)">
                             🔄 Recarregar Info
@@ -138,6 +411,120 @@ function loadManifests() {
                 </div>
             `;
             }).join('');
+
+            // Verificar relatórios existentes para todos os manifests
+            const manifestUrls = manifests.map(m => m.pageUrl);
+            chrome.runtime.sendMessage({ action: 'checkReports', urls: manifestUrls }, async (response) => {
+                if (chrome.runtime.lastError) {
+                    console.warn('[Video Extractor] Falha ao verificar relatórios:', chrome.runtime.lastError.message);
+                    return;
+                }
+                if (response && response.success && response.reports) {
+                    // Atualizar ações para cada manifest com relatório existente
+                    for (const [url, reportInfo] of Object.entries(response.reports)) {
+                        if (reportInfo.has_report) {
+                            const actionsDiv = document.querySelector(`[data-actions-for="${url}"]`);
+                            if (actionsDiv) {
+                                actionsDiv.innerHTML = `
+                                    <div style="padding: 10px; background: #e8f5e9; border-radius: 6px; border: 1px solid #4CAF50; margin-bottom: 8px;">
+                                        <div style="font-size: 11px; color: #2e7d32; font-weight: 600;">
+                                            ✅ Este vídeo já foi processado.
+                                        </div>
+                                        <div style="font-size: 10px; color: #666; margin-top: 4px;">
+                                            Para reprocessar, utilize a tela de relatório ou exclua-o da biblioteca.
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-pop btn-sm view-report-btn" style="flex: 1;" data-domain="${reportInfo.domain}" data-video-id="${reportInfo.video_id}">
+                                        📊 Ver Relatório
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm test-btn" 
+                                            data-url="${document.querySelector(`[data-page-url="${url}"] .manifest-url`)?.textContent || ''}" 
+                                            title="Copiar manifest">
+                                        📋 Copiar
+                                    </button>
+                                `;
+                            }
+                        }
+                    }
+
+                    // Re-adicionar event listeners para botões de copiar (os novos)
+                    document.querySelectorAll('.test-btn').forEach(btn => {
+                        btn.removeEventListener('click', handleCopyClick);
+                        btn.addEventListener('click', handleCopyClick);
+                    });
+                }
+
+                // Verificar status de processamento para atualizar botões
+                try {
+                    const API_HOSTS = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+                    for (const host of API_HOSTS) {
+                        try {
+                            const statusResponse = await fetch(`${host}/api/status`, { cache: 'no-store' });
+                            if (statusResponse.ok) {
+                                const processingStatus = await statusResponse.json();
+
+                                // Atualizar botões para URLs em processamento ou fila
+                                for (const url of manifestUrls) {
+                                    const actionsDiv = document.querySelector(`[data-actions-for="${url}"]`);
+                                    if (!actionsDiv) continue;
+
+                                    // Não sobrescrever se já tem relatório
+                                    if (actionsDiv.querySelector('.btn-pop[href*="localhost"]')) continue;
+
+                                    const isProcessing = processingStatus.is_processing && processingStatus.current_url === url;
+                                    const isInQueue = processingStatus.queue && processingStatus.queue.includes(url);
+                                    const queuePosition = isInQueue ? processingStatus.queue.indexOf(url) + 1 : 0;
+
+                                    if (isProcessing) {
+                                        actionsDiv.innerHTML = `
+                                            <div style="padding: 10px; background: #fff3cd; border-radius: 6px; border: 1px solid #f59e0b; margin-bottom: 8px;">
+                                                <div style="font-size: 11px; color: #92400e; font-weight: 600;">
+                                                    ⏳ Este vídeo está sendo processado...
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-sm btn-cancel-cap" style="background: #ef4444; color: white;" data-url="${url}">
+                                                ❌ Cancelar
+                                            </button>
+                                            <button class="btn btn-secondary btn-sm test-btn" 
+                                                    data-url="${document.querySelector(`[data-page-url="${url}"] .manifest-url`)?.textContent || ''}" 
+                                                    title="Copiar manifest">
+                                                📋 Copiar
+                                            </button>
+                                        `;
+                                    } else if (isInQueue) {
+                                        actionsDiv.innerHTML = `
+                                            <div style="padding: 10px; background: #dbeafe; border-radius: 6px; border: 1px solid #3b82f6; margin-bottom: 8px;">
+                                                <div style="font-size: 11px; color: #1e40af; font-weight: 600;">
+                                                    🔄 Na fila de processamento (posição ${queuePosition})
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-sm btn-remove-queue-cap" style="background: #f59e0b; color: white;" data-url="${url}">
+                                                🗑️ Remover (Fila ${queuePosition})
+                                            </button>
+                                            <button class="btn btn-secondary btn-sm test-btn" 
+                                                    data-url="${document.querySelector(`[data-page-url="${url}"] .manifest-url`)?.textContent || ''}" 
+                                                    title="Copiar manifest">
+                                                📋 Copiar
+                                            </button>
+                                        `;
+                                    }
+                                }
+
+                                // Re-adicionar event listeners
+                                document.querySelectorAll('.test-btn').forEach(btn => {
+                                    btn.removeEventListener('click', handleCopyClick);
+                                    btn.addEventListener('click', handleCopyClick);
+                                });
+                                break;
+                            }
+                        } catch (e) {
+                            continue;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Erro ao verificar status de processamento:', e);
+                }
+            });
 
             // Event listeners para botões de atualizar
             document.querySelectorAll('.refresh-btn').forEach(btn => {
@@ -208,6 +595,8 @@ function loadManifests() {
                             chrome.runtime.sendMessage({
                                 action: 'expectManualCapture',
                                 tabId: tabs[0].id
+                            }, () => {
+                                if (chrome.runtime.lastError) console.warn('Expected lastError on manual capture:', chrome.runtime.lastError.message);
                             });
 
                             // Delay maior para garantir que a mensagem foi processada
@@ -272,6 +661,12 @@ function refreshMetadata(button) {
     button.disabled = true;
 
     chrome.runtime.sendMessage({ action: 'refreshMetadata' }, (response) => {
+        if (chrome.runtime.lastError) {
+            button.innerHTML = '❌ Erro';
+            console.error('Erro de porta fechada ao atualizar:', chrome.runtime.lastError.message);
+            button.disabled = false;
+            return;
+        }
         if (response && response.success) {
             button.innerHTML = '✅ Atualizado!';
             setTimeout(() => {
@@ -645,9 +1040,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 '🔄 Recarregar Página?',
                                 '📌 Para capturar o vídeo, a página precisa ser recarregada. Após recarregar, aguarde o vídeo carregar e clique no ícone da extensão novamente.',
                                 () => {
-                                    // Recarregar página e fechar popup
-                                    chrome.tabs.reload(tabId);
-                                    window.close();
+                                    // IMPORTANTE: Enviar mensagem de captura manual ANTES de recarregar
+                                    // Isso permite capturar mesmo se auto-capture estiver desativado
+                                    chrome.runtime.sendMessage({
+                                        action: 'expectManualCapture',
+                                        tabId: tabId
+                                    });
+
+                                    // Pequeno delay para garantir que a mensagem foi processada
+                                    setTimeout(() => {
+                                        chrome.tabs.reload(tabId);
+                                        window.close();
+                                    }, 100);
                                 }
                             );
                         } else {
@@ -1135,7 +1539,260 @@ function switchToTab(tabName, tabElement) {
         extensionSettingsChanged = false;
         setTimeout(setupExtensionSettingsChangeListeners, 500);
     }
+
+    // Load manifests when manifests tab is opened
+    if (tabName === 'manifests') {
+        loadAllManifestsTab();
+    }
 }
+
+// Função para carregar TODOS os manifests na aba Manifests (do arquivo captured_manifests.json)
+async function loadAllManifestsTab() {
+    const listDiv = document.getElementById('manifests-tab-list');
+    if (!listDiv) return;
+
+    // Mostrar loading
+    listDiv.innerHTML = `
+        <div class="empty-state">
+            <div class="icon">⏳</div>
+            <p>Carregando manifests...</p>
+        </div>
+    `;
+
+    try {
+        // Buscar manifests da API (captured_manifests.json)
+        const API_HOSTS = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+        let manifests = [];
+
+        for (const host of API_HOSTS) {
+            try {
+                const response = await fetch(`${host}/api/manifests`, { cache: 'no-store' });
+                if (response.ok) {
+                    manifests = await response.json();
+                    break;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        if (!manifests || manifests.length === 0) {
+            listDiv.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">📋</div>
+                    <p>Nenhum manifest capturado.<br>Acesse páginas com vídeos!</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Verificar quais já têm relatório
+        let reportInfo = {};
+        try {
+            const urls = manifests.map(m => m.pageUrl);
+            const checkResult = await new Promise(resolve => {
+                chrome.runtime.sendMessage({ action: 'checkReports', urls }, resolve);
+            });
+            if (checkResult && checkResult.success) {
+                reportInfo = checkResult.reports || {};
+            }
+        } catch (e) {
+            console.warn('Erro ao verificar relatórios:', e);
+        }
+
+        // Verificar status de processamento atual
+        let processingStatus = { is_processing: false, current_url: '', queue: [] };
+        try {
+            const API_HOSTS = ['http://localhost:5000', 'http://127.0.0.1:5000'];
+            for (const host of API_HOSTS) {
+                try {
+                    const statusResponse = await fetch(`${host}/api/status`, { cache: 'no-store' });
+                    if (statusResponse.ok) {
+                        processingStatus = await statusResponse.json();
+                        break;
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+        } catch (e) {
+            console.warn('Erro ao verificar status:', e);
+        }
+
+        listDiv.innerHTML = manifests.map(m => {
+            const capturedDate = new Date(m.timestamp);
+            const now = new Date();
+            const minutesAgo = Math.floor((now - capturedDate) / 60000);
+            const timeText = minutesAgo === 0 ? 'agora' : `${minutesAgo}min atrás`;
+
+            const videoTitle = m.videoTitle || m.pageTitle || m.domain || 'Título não detectado';
+            const truncatedUrl = m.pageUrl.length > 50 ? m.pageUrl.substring(0, 50) + '...' : m.pageUrl;
+
+            const hasReport = reportInfo[m.pageUrl] && reportInfo[m.pageUrl].has_report;
+            const report = reportInfo[m.pageUrl] || {};
+
+            // Verificar estados de processamento
+            const isProcessing = processingStatus.is_processing && processingStatus.current_url === m.pageUrl;
+            const isInQueue = processingStatus.queue && processingStatus.queue.includes(m.pageUrl);
+            const queuePosition = isInQueue ? processingStatus.queue.indexOf(m.pageUrl) + 1 : 0;
+
+            let borderColor = hasReport ? '#4CAF50' : (isProcessing ? '#f59e0b' : (isInQueue ? '#3b82f6' : '#FF6B6B'));
+
+            let actionButtons = '';
+            if (hasReport) {
+                actionButtons = `
+                    <div style="width: 100%; padding: 8px; background: #e8f5e9; border-radius: 6px; border: 1px solid #4CAF50; margin-bottom: 8px;">
+                        <div style="font-size: 10px; color: #2e7d32; font-weight: 600;">
+                            ✅ Este vídeo já foi processado.
+                        </div>
+                        <div style="font-size: 9px; color: #666; margin-top: 4px;">
+                            Para reprocessar, utilize a tela de relatório ou exclua-o da biblioteca.
+                        </div>
+                    </div>
+                    <button class="btn btn-pop btn-sm view-report-btn" style="flex: 1;" data-domain="${report.domain}" data-video-id="${report.video_id}">
+                        📊 Ver Relatório
+                    </button>
+                `;
+            } else if (isProcessing) {
+                actionButtons = `
+                    <div style="width: 100%; padding: 8px; background: #fff3cd; border-radius: 6px; border: 1px solid #f59e0b; margin-bottom: 8px;">
+                        <div style="font-size: 10px; color: #92400e; font-weight: 600;">
+                            ⏳ Processando agora...
+                        </div>
+                    </div>
+                    <button class="btn btn-sm cancel-processing-btn" style="flex: 1; background: #ef4444; color: white;" data-url="${m.pageUrl.replace(/"/g, '&quot;')}">
+                        ❌ Cancelar
+                    </button>
+                `;
+            } else if (isInQueue) {
+                actionButtons = `
+                    <div style="width: 100%; padding: 8px; background: #dbeafe; border-radius: 6px; border: 1px solid #3b82f6; margin-bottom: 8px;">
+                        <div style="font-size: 10px; color: #1e40af; font-weight: 600;">
+                            🔄 Na fila (posição ${queuePosition})
+                        </div>
+                    </div>
+                    <button class="btn btn-sm remove-from-queue-btn" style="flex: 1; background: #f59e0b; color: white;" data-url="${m.pageUrl.replace(/"/g, '&quot;')}">
+                        🗑️ Remover (Fila ${queuePosition})
+                    </button>
+                `;
+            } else {
+                actionButtons = `
+                    <button class="btn btn-primary btn-sm process-manifest-btn" style="flex: 1;" data-url="${m.pageUrl.replace(/"/g, '&quot;')}" data-manifest="${(m.manifestUrl || '').replace(/"/g, '&quot;')}">
+                        ▶️ Processar
+                    </button>
+                `;
+            }
+
+            return `
+                <div class="manifest-item" style="border-left: 4px solid ${borderColor};">
+                    <div class="manifest-domain">🌐 ${m.domain}</div>
+                    <div style="font-weight: 600; color: #1e40af; margin: 4px 0; font-size: 12px;">
+                        🎬 ${videoTitle}
+                    </div>
+                    <div style="font-size: 10px; color: #059669; margin: 4px 0;">
+                        🔗 <a href="${m.pageUrl}" target="_blank" style="color: #059669; text-decoration: none;">${truncatedUrl}</a>
+                    </div>
+                    <div style="font-size: 9px; color: #666; margin-top: 4px;">
+                        📅 ${capturedDate.toLocaleString('pt-BR')} (${timeText})
+                    </div>
+                    <div style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap;">
+                        ${actionButtons}
+                        <button class="btn btn-secondary btn-sm copy-manifest-btn" data-url="${(m.manifestUrl || m.pageUrl).replace(/"/g, '&quot;')}">
+                            📋 Copiar
+                        </button>
+                        <button class="btn btn-sm delete-manifest-btn" style="background: #ef4444; color: white;" data-url="${m.pageUrl.replace(/"/g, '&quot;')}">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // All listeners are now handled via global event delegation for CSP compliance
+    } catch (error) {
+        console.error('Erro ao carregar manifests:', error);
+        listDiv.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">❌</div>
+                <p>Erro ao carregar manifests.<br>Verifique se a API está rodando.</p>
+            </div>
+        `;
+    }
+}
+
+// Event listeners para botões da aba Manifests e Captura
+document.addEventListener('DOMContentLoaded', () => {
+    // Aba Manifests
+    const refreshMBtn = document.getElementById('refreshManifestsBtn');
+    if (refreshMBtn) {
+        refreshMBtn.addEventListener('click', loadAllManifestsTab);
+    }
+
+    const clearManifestsBtn = document.getElementById('clearAllManifestsBtn');
+    if (clearManifestsBtn) {
+        clearManifestsBtn.addEventListener('click', async () => {
+            const confirmed = await showPopupConfirmModal(
+                '🗑️ Limpar Todos?',
+                'Tem certeza que deseja limpar TODOS os manifests capturados? Esta ação é irreversível.'
+            );
+            if (confirmed) {
+                chrome.runtime.sendMessage({ action: 'clearManifests' }, () => {
+                    if (chrome.runtime.lastError) console.warn('Port closed during clearManifests:', chrome.runtime.lastError.message);
+                    loadAllManifestsTab();
+                });
+            }
+        });
+    }
+
+    // Aba Captura
+    const refreshCBtn = document.getElementById('refreshBtn');
+    if (refreshCBtn) {
+        refreshCBtn.addEventListener('click', () => {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs[0]) {
+                    chrome.runtime.sendMessage({
+                        action: 'expectManualCapture',
+                        tabId: tabs[0].id
+                    }, (resp1) => {
+                        if (chrome.runtime.lastError) console.warn('Expected lastError:', chrome.runtime.lastError.message);
+
+                        chrome.runtime.sendMessage({ action: 'forceRecapture' }, (response) => {
+                            if (chrome.runtime.lastError) {
+                                console.error('Erro ao forçar captura:', chrome.runtime.lastError.message);
+                                loadManifests();
+                                return;
+                            }
+
+                            if (response && response.success) {
+                                showToast('🔄 Recaptura solicitada!', 'success');
+                                loadManifests();
+                            } else {
+                                console.error('Erro ao forçar captura:', response?.error);
+                                loadManifests();
+                            }
+                        });
+                    });
+                }
+            });
+        });
+    }
+
+    const clearBtn = document.getElementById('clearBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', async () => {
+            const confirmed = await showPopupConfirmModal(
+                '🗑️ Limpar Captura?',
+                'Deseja limpar os vídeos capturados nesta sessão?'
+            );
+            if (confirmed) {
+                chrome.runtime.sendMessage({ action: 'clearManifests' }, () => {
+                    if (chrome.runtime.lastError) console.warn('Port closed during clearManifests (Capture):', chrome.runtime.lastError.message);
+                    loadManifests();
+                });
+            }
+        });
+    }
+});
 
 // Inicializar tabs (incluindo settings)
 document.addEventListener('DOMContentLoaded', () => {
@@ -1164,6 +1821,67 @@ document.addEventListener('DOMContentLoaded', () => {
         if (extensionSettingsChanged) {
             e.preventDefault();
             e.returnValue = '';
+        }
+    });
+
+    // Delegação de evento global para botões dinâmicos (CSP Compliance)
+    document.addEventListener('click', (e) => {
+        const target = e.target.closest('button');
+        if (!target) return;
+
+        // Ação: Ver Relatório
+        if (target.classList.contains('view-report-btn')) {
+            const domain = target.getAttribute('data-domain');
+            const videoId = target.getAttribute('data-video-id');
+            if (domain && videoId && typeof window.viewReport === 'function') {
+                window.viewReport(domain, videoId);
+            }
+        }
+
+        // Ação: Processar Manifest (Aba Manifests)
+        if (target.classList.contains('process-manifest-btn')) {
+            const url = target.getAttribute('data-url');
+            if (url) {
+                processManifestAction(url, target);
+            }
+        }
+
+        // Ação: Copiar Manifest (Aba Manifests/Captura)
+        if (target.classList.contains('copy-manifest-btn')) {
+            handleCopyClick({ currentTarget: target });
+        }
+
+        // Ação: Excluir Manifest (Aba Manifests/Captura)
+        if (target.classList.contains('delete-manifest-btn')) {
+            const url = target.getAttribute('data-url');
+            if (url) {
+                deleteManifestAction(url);
+            }
+        }
+
+        // Ação: Cancelar Processamento (Aba Manifests/Captura)
+        if (target.classList.contains('cancel-processing-btn') || target.classList.contains('btn-cancel-cap')) {
+            const url = target.getAttribute('data-url');
+            if (url) {
+                if (target.classList.contains('btn-cancel-cap')) {
+                    cancelProcessingFromCapture(url);
+                } else {
+                    cancelProcessingAction(url);
+                }
+            }
+        }
+
+        // Ação: Remover da Fila (Aba Manifests/Captura)
+        if (target.classList.contains('remove-from-queue-btn') || target.classList.contains('btn-remove-queue-cap')) {
+            const url = target.getAttribute('data-url');
+            if (url) {
+                if (target.classList.contains('btn-remove-queue-cap')) {
+                    removeFromQueueCapture(url);
+                } else {
+                    // Para Manifests tab, podemos usar a mesma função ou criar uma nova se o reload for diferente
+                    removeFromQueueCapture(url);
+                }
+            }
         }
     });
 });

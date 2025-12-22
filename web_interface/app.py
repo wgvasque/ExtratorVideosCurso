@@ -186,7 +186,25 @@ def start_processing():
     """Iniciar processamento de vídeos"""
     global processing_state
     
+    data = request.json
+    urls = data.get('urls', [])
+    
+    # Validar URLs primeiro
+    valid_urls = [url.strip() for url in urls if url.strip().startswith('http')]
+    
+    if not valid_urls:
+        return jsonify({'error': 'Nenhuma URL válida'}), 400
+    
     if processing_state['is_processing']:
+        # Adicionar à fila em vez de rejeitar
+        queue = processing_state.get('queue', [])
+        added_count = 0
+        for url in valid_urls:
+            if url not in queue and url != processing_state.get('current_url'):
+                queue.append(url)
+                added_count += 1
+        processing_state['queue'] = queue
+        
         cur = dict(processing_state)
         if 'current_proc' in cur:
             cur['has_current_proc'] = bool(cur['current_proc'])
@@ -194,18 +212,20 @@ def start_processing():
         total = cur.get('total_videos') or 0
         current = cur.get('current_video') or 0
         pct = int((current / total) * 100) if total > 0 else 0
+        
         return jsonify({
-            'status': 'already_in_progress',
+            'status': 'added_to_queue' if added_count > 0 else 'already_in_queue',
+            'added_to_queue': added_count > 0,
+            'queue_position': len(queue),
             'processing': True,
             'progress': pct,
             'current_url': cur.get('current_url'),
             'current_step': 'processing',
             'total': total,
-            'current': current
+            'current': current,
+            'queue': queue
         })
     
-    data = request.json
-    urls = data.get('urls', [])
     prompt_model = data.get('promptModel', 'modelo2')  # Capturar modelo selecionado
     manifest_url = (data.get('manifestUrl') or '').strip().replace('`','')
     if manifest_url and '?p=' in manifest_url and 'cloudflarestream.com' in manifest_url and '/manifest/video.m3u8' in manifest_url:
@@ -215,15 +235,6 @@ def start_processing():
         token = (qs.get('p') or [''])[0].strip()
         if token and ('.' in token) and (len(token.split('.')) == 3):
             manifest_url = f"{pu.scheme}://{pu.netloc}/{token}/manifest/video.m3u8"
-    
-    if not urls:
-        return jsonify({'error': 'Nenhuma URL fornecida'}), 400
-    
-    # Validar URLs
-    valid_urls = [url.strip() for url in urls if url.strip().startswith('http')]
-    
-    if not valid_urls:
-        return jsonify({'error': 'Nenhuma URL válida'}), 400
     
     # Definir modelo de prompt como variável de ambiente para os subprocessos
     os.environ['PROMPT_TEMPLATE'] = prompt_model
@@ -270,27 +281,25 @@ def start_processing():
         except Exception as e:
             print(f"❌ [API] Erro ao salvar manifest JWT: {e}")
     
-    # Resetar estado
+    # Resetar estado e popular fila
     processing_state.update({
         'is_processing': True,
         'current_video': 0,
         'total_videos': len(valid_urls),
         'status': 'processing',
         'start_time': datetime.now(),
-        'logs': []
+        'logs': [],
+        'queue': list(valid_urls) # Iniciar com URLs enviadas
     })
     
     # Iniciar processamento em thread separada
     thread = threading.Thread(
         target=process_videos_batch,
-        args=(valid_urls,),
         daemon=True
     )
     thread.start()
     
     print(f"✅ [API] Thread de processamento iniciada!")
-    print(f"✅ [API] Thread ID: {thread.ident}")
-    print(f"✅ [API] Thread alive: {thread.is_alive()}")
     
     return jsonify({
         'status': 'started',
@@ -517,11 +526,109 @@ def get_status():
     # Retornar step detalhado se disponível
     if safe.get('is_processing'):
         safe['current_step'] = safe.get('current_step') or 'Processando...'
+        # Calcular tempo decorrido
+        start_time = safe.get('start_time')
+        if start_time:
+            from datetime import datetime
+            try:
+                elapsed = (datetime.now() - start_time).total_seconds()
+                safe['elapsed_time'] = int(elapsed)
+            except:
+                safe['elapsed_time'] = 0
+        else:
+            safe['elapsed_time'] = 0
     else:
         safe['current_step'] = 'idle'
+        safe['elapsed_time'] = 0
     # Incluir fila no status
     safe['queue'] = safe.get('queue', [])
     return jsonify(safe)
+
+@app.route('/api/check-reports', methods=['POST'])
+def check_reports():
+    """Verificar se URLs já têm relatórios existentes (busca por origin no JSON)"""
+    data = request.json
+    urls = data.get('urls', [])
+    
+    if not urls:
+        return jsonify({'error': 'Nenhuma URL fornecida'}), 400
+    
+    project_root = Path(__file__).parent.parent
+    sumarios_dir = project_root / Path(os.getenv('SUMARIOS_DIR', 'sumarios'))
+    
+    results = {url: {'has_report': False} for url in urls}
+    
+    if not sumarios_dir.exists():
+        return jsonify(results)
+    
+    # Normalizar URLs para comparação
+    from urllib.parse import urlparse, parse_qs
+    
+    def normalize_url(url):
+        """Normaliza URL para comparação (remove trailing slash, www., etc)"""
+        url = url.strip().rstrip('/')
+        parsed = urlparse(url)
+        domain = parsed.netloc.replace('www.', '')
+        
+        # Para YouTube, extrair video_id para comparação independente do formato
+        if 'youtube.com' in domain or 'youtu.be' in domain:
+            if 'v=' in url:
+                qs = parse_qs(parsed.query)
+                vid = qs.get('v', [''])[0]
+                if vid:
+                    return f"youtube:{vid}"
+            elif 'shorts' in parsed.path:
+                parts = [p for p in parsed.path.split('/') if p]
+                if 'shorts' in parts:
+                    idx = parts.index('shorts')
+                    if idx + 1 < len(parts):
+                        return f"youtube:{parts[idx + 1]}"
+            elif 'youtu.be' in domain:
+                parts = [p for p in parsed.path.split('/') if p]
+                if parts:
+                    return f"youtube:{parts[0]}"
+        
+        return url.lower()
+    
+    # Normalizar URLs buscadas
+    url_map = {normalize_url(url): url for url in urls}
+    
+    # Iterar por todos os relatórios existentes
+    for json_file in sumarios_dir.rglob('resumo_*.json'):
+        try:
+            # Extrair info do caminho
+            parts = json_file.parts
+            domain_idx = parts.index('sumarios') + 1
+            domain = parts[domain_idx] if domain_idx < len(parts) else 'unknown'
+            video_id = parts[domain_idx + 1] if domain_idx + 1 < len(parts) else 'unknown'
+            
+            # Ler JSON para pegar origin ou url_video
+            with open(json_file, 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
+            
+            # Tentar origin primeiro, depois url_video
+            origin = report_data.get('origin') or report_data.get('url_video') or ''
+            title = report_data.get('titulo_video') or report_data.get('titulo') or f'Video {video_id}'
+            
+            if origin:
+                normalized_origin = normalize_url(origin)
+                
+                # Verificar se corresponde a alguma URL buscada
+                if normalized_origin in url_map:
+                    original_url = url_map[normalized_origin]
+                    results[original_url] = {
+                        'has_report': True,
+                        'domain': domain,
+                        'video_id': video_id,
+                        'title': title,
+                        'report_url': f'/view/{domain}/{video_id}'
+                    }
+                    
+        except Exception as e:
+            print(f"Erro ao ler {json_file}: {e}")
+            continue
+    
+    return jsonify(results)
 
 @app.route('/api/reports')
 def list_reports():
@@ -1005,8 +1112,8 @@ def view_report(domain, video_id):
     timestamp = int(time.time())
     return render_template('report_standalone.html', domain=domain, video_id=video_id, timestamp=timestamp)
 
-def process_videos_batch(urls):
-    """Processar lista de URLs em batch"""
+def process_videos_batch():
+    """Processar lista de URLs da fila (dinâmica)"""
     global processing_state
     
     from urllib.parse import urlparse
@@ -1017,31 +1124,34 @@ def process_videos_batch(urls):
     except Exception:
         pass
     
-    # Inicializar fila com todas as URLs
-    processing_state['queue'] = list(urls)
+    processed_count = 0
     
-    # Emitir estado inicial da fila
-    socketio.emit('queue_updated', {
-        'queue': processing_state['queue'],
-        'total': len(processing_state['queue'])
-    })
-    
-    for i, url in enumerate(urls, 1):
-        if not processing_state['is_processing']:
+    # Loop contínuo enquanto houver itens na fila e estiver processando
+    while processing_state['is_processing']:
+        queue = processing_state.get('queue', [])
+        if not queue:
             break
-        
-        # Remover URL atual da fila
-        if url in processing_state['queue']:
-            processing_state['queue'].remove(url)
             
-        processing_state['current_video'] = i
+        # Pegar próximo da fila
+        url = queue.pop(0)
+        processing_state['queue'] = queue
+        processed_count += 1
+        
+        processing_state['current_video'] = processed_count
         processing_state['current_url'] = url
         
+        # Atualizar total se novos itens foram adicionados
+        total = processing_state['total_videos']
+        if processed_count > total:
+            processing_state['total_videos'] = processed_count
+            total = processed_count
+
         # Emitir atualização da fila
         socketio.emit('queue_updated', {
             'queue': processing_state['queue'],
-            'total': len(processing_state['queue']),
-            'current': url
+            'total': total,
+            'current': url,
+            'processed_count': processed_count
         })
         
         pu = urlparse(url)
@@ -1071,11 +1181,14 @@ def process_videos_batch(urls):
         
         # Emitir progresso via WebSocket
         elapsed = (datetime.now() - processing_state['start_time']).total_seconds() if processing_state['start_time'] else 0
-        percent = int((i / len(urls)) * 100)
-        eta = int((elapsed / i) * (len(urls) - i)) if i > 0 else 0
+        # Calcular percentual baseado no total atual da fila + processados
+        total_to_display = max(total, processed_count + len(processing_state['queue']))
+        percent = int((processed_count / total_to_display) * 100)
+        eta = int((elapsed / processed_count) * (total_to_display - processed_count)) if processed_count > 0 else 0
+        
         socketio.emit('progress', {
-            'current': i,
-            'total': len(urls),
+            'current': processed_count,
+            'total': total_to_display,
             'percent': percent,
             'url': url,
             'status': 'processing',
@@ -1115,8 +1228,8 @@ def process_videos_batch(urls):
                 print(f"⚠️ [DEBUG] Falha ao salvar hint de manifest: {e}")
             
             # Atualizar step: Preparando
-            processing_state['current_step'] = f"📋 Preparando vídeo {i}/{len(urls)}..."
-            print(f"🔍 [DEBUG] Processando vídeo {i}/{len(urls)}: {url}")
+            processing_state['current_step'] = f"📋 Preparando vídeo {processed_count}/{total_to_display}..."
+            print(f"🔍 [DEBUG] Processando vídeo {processed_count}/{total_to_display}: {url}")
             print(f"🔍 [DEBUG] Referer: {referer}")
             
             # Criar arquivo temporário com URL para batch_cli
@@ -1128,7 +1241,7 @@ def process_videos_batch(urls):
                 temp_file = f.name
             
             # Atualizar step: Iniciando processamento
-            processing_state['current_step'] = f"🚀 Iniciando processamento {i}/{len(urls)}..."
+            processing_state['current_step'] = f"🚀 Iniciando processamento {processed_count}/{total_to_display}..."
             print(f"🔍 [DEBUG] Arquivo temporário: {temp_file}")
             
             cmd = [
@@ -1148,7 +1261,7 @@ def process_videos_batch(urls):
             print(f"🔍 [DEBUG] Credenciais para {domain}: {'✅ Encontradas' if email else '❌ Não encontradas'}")
             
             # Criar arquivo temporário para capturar output
-            temp_output = project_root / 'web_interface' / 'logs' / f'output_{i}.log'
+            temp_output = project_root / 'web_interface' / 'logs' / f'output_{processed_count}.log'
             temp_output.parent.mkdir(parents=True, exist_ok=True)
             
             # Executar capturando output em arquivo
@@ -1163,7 +1276,7 @@ def process_videos_batch(urls):
             processing_state['current_proc'] = proc
             
             # Atualizar step: Executando
-            processing_state['current_step'] = f"⚙️ Processando {i}/{len(urls)} - Extraindo áudio..."
+            processing_state['current_step'] = f"⚙️ Processando {processed_count}/{total_to_display} - Extraindo áudio..."
             print(f"🔍 [DEBUG] Processo iniciado, PID: {proc.pid}")
             
             # Monitorar o processo e atualizar steps baseado no output
@@ -1188,29 +1301,29 @@ def process_videos_batch(urls):
                     
                     # Verificar marcadores na ordem reversa (do mais avançado ao inicial)
                     if '[ok] json atualizado' in lower_output or '[ok] markdown salvo' in lower_output:
-                        processing_state['current_step'] = f"💾 Salvando arquivos {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"💾 Salvando arquivos {processed_count}/{total_to_display}..."
                     elif '[tempo] etapa output:' in lower_output:
-                        processing_state['current_step'] = f"💾 Salvando arquivos {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"💾 Salvando arquivos {processed_count}/{total_to_display}..."
                     elif '[tempo] etapa summarize:' in lower_output:
-                        processing_state['current_step'] = f"💾 Salvando arquivos {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"💾 Salvando arquivos {processed_count}/{total_to_display}..."
                     elif '[ok] gemini' in lower_output or '[ok] openrouter' in lower_output or 'gemini funcionou' in lower_output:
-                        processing_state['current_step'] = f"🤖 Geração do resumo concluída {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"🤖 Geração do resumo concluída {processed_count}/{total_to_display}..."
                     elif 'tentando gemini' in lower_output or 'tentando openrouter' in lower_output or 'summarize_transcription' in lower_output:
-                        processing_state['current_step'] = f"🤖 Gerando resumo com IA {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"🤖 Gerando resumo com IA {processed_count}/{total_to_display}..."
                     elif '[tempo] etapa transcription:' in lower_output:
-                        processing_state['current_step'] = f"🤖 Gerando resumo com IA {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"🤖 Gerando resumo com IA {processed_count}/{total_to_display}..."
                     elif 'chunks' in lower_output or 'whisper' in lower_output or 'transcrevendo' in lower_output or 'transcrever' in lower_output:
-                        processing_state['current_step'] = f"🎤 Transcrevendo áudio {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"🎤 Transcrevendo áudio {processed_count}/{total_to_display}..."
                     elif '[tempo] etapa ingest:' in lower_output:
-                        processing_state['current_step'] = f"🎤 Transcrevendo áudio {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"🎤 Transcrevendo áudio {processed_count}/{total_to_display}..."
                     elif 'ffmpeg' in lower_output or 'yt-dlp' in lower_output or 'baixando' in lower_output or 'download' in lower_output:
-                        processing_state['current_step'] = f"📥 Baixando áudio {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"📥 Baixando áudio {processed_count}/{total_to_display}..."
                     elif '[tempo] etapa resolve:' in lower_output:
-                        processing_state['current_step'] = f"📥 Baixando áudio {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"📥 Baixando áudio {processed_count}/{total_to_display}..."
                     elif 'extension' in lower_output or 'manifest' in lower_output or 'captured_manifests' in lower_output:
-                        processing_state['current_step'] = f"🔍 Detectando fonte de vídeo {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"🔍 Detectando fonte de vídeo {processed_count}/{total_to_display}..."
                     elif 'resolver fonte' in lower_output or 'resolve' in lower_output:
-                        processing_state['current_step'] = f"🔍 Detectando fonte de vídeo {i}/{len(urls)}..."
+                        processing_state['current_step'] = f"🔍 Detectando fonte de vídeo {processed_count}/{total_to_display}..."
                 except:
                     pass
                 
@@ -1238,13 +1351,13 @@ def process_videos_batch(urls):
                 print(f"⚠️ [DEBUG] Erro ao salvar log: {e}")
             
             if proc.returncode == 0:
-                processing_state['current_step'] = f"✅ Vídeo {i}/{len(urls)} concluído!"
+                processing_state['current_step'] = f"✅ Vídeo {processed_count}/{total_to_display} concluído!"
                 print(f"✅ [DEBUG] Vídeo processado com sucesso!")
                 socketio.emit('video_complete', {
                     'url': url,
                     'status': 'success',
-                    'current': i,
-                    'total': len(urls)
+                    'current': processed_count,
+                    'total': total_to_display
                 })
             else:
                 # Ler output para mostrar erro
@@ -1264,26 +1377,27 @@ def process_videos_batch(urls):
             socketio.emit('video_error', {
                 'url': url,
                 'error': 'Timeout: processamento demorou mais de 10 minutos',
-                'current': i,
-                'total': len(urls)
+                'current': processed_count,
+                'total': total_to_display
             })
         except Exception as e:
             socketio.emit('video_error', {
                 'url': url,
                 'error': str(e),
-                'current': i,
-                'total': len(urls)
+                'current': processed_count,
+                'total': total_to_display
             })
     
     # Finalizar processamento
     processing_state.update({
         'is_processing': False,
         'status': 'completed',
-        'current_video': len(urls)
+        'current_video': processed_count,
+        'total_videos': max(total, processed_count)
     })
     
     socketio.emit('batch_complete', {
-        'total': len(urls),
+        'total': max(total, processed_count),
         'status': 'completed'
     })
 
@@ -1541,6 +1655,79 @@ def list_manifests():
         result.sort(key=lambda x: x.get('captured_at', ''), reverse=True)
         
         return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/manifests/delete', methods=['POST'])
+def delete_manifest():
+    """Deletar um manifest individual por pageUrl"""
+    try:
+        data = request.json
+        page_url = data.get('pageUrl')
+        
+        if not page_url:
+            return jsonify({'error': 'pageUrl é obrigatório'}), 400
+        
+        project_root = Path(__file__).parent.parent
+        manifests_file = project_root / 'captured_manifests.json'
+        
+        if not manifests_file.exists():
+            return jsonify({'error': 'Arquivo de manifests não encontrado'}), 404
+        
+        with open(manifests_file, 'r', encoding='utf-8') as f:
+            manifests = json.load(f)
+        
+        if page_url not in manifests:
+            return jsonify({'error': 'Manifest não encontrado'}), 404
+        
+        # Remover o manifest
+        del manifests[page_url]
+        
+        # Salvar arquivo atualizado
+        with open(manifests_file, 'w', encoding='utf-8') as f:
+            json.dump(manifests, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Manifest removido com sucesso',
+            'remaining': len(manifests)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reports/delete', methods=['POST'])
+def delete_report():
+    """Deletar um relatório individual por domain e video_id"""
+    try:
+        data = request.json
+        domain = data.get('domain')
+        video_id = data.get('video_id')
+        
+        if not domain or not video_id:
+            return jsonify({'error': 'domain e video_id são obrigatórios'}), 400
+        
+        project_root = Path(__file__).parent.parent
+        sumarios_dir = project_root / Path(os.getenv('SUMARIOS_DIR', 'sumarios'))
+        video_dir = sumarios_dir / domain / video_id
+        
+        if not video_dir.exists():
+            return jsonify({'error': 'Relatório não encontrado'}), 404
+        
+        # Remover diretório inteiro do vídeo
+        import shutil
+        shutil.rmtree(video_dir)
+        
+        # Verificar se diretório do domínio está vazio e remover se sim
+        domain_dir = sumarios_dir / domain
+        if domain_dir.exists() and not any(domain_dir.iterdir()):
+            domain_dir.rmdir()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Relatório removido com sucesso'
+        })
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

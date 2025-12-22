@@ -9,6 +9,7 @@ let startTime = null;
 let timerInterval = null;
 let validationTimeout = null;
 let currentStep = null;
+let lastLoggedStep = null; // Para evitar logs repetidos
 
 // Constantes
 const AVG_TIME_PER_VIDEO = 5 * 60; // 5 minutos por vídeo em segundos
@@ -141,9 +142,10 @@ function updateProgressFromStatus(status) {
     if (failedCount) failedCount.textContent = status.failed_videos || 0;
     if (totalCount) totalCount.textContent = status.total_videos || 0;
 
-    // Atualizar terminal se houver step atual
-    if (status.current_step && status.current_step !== 'idle') {
+    // Atualizar terminal se houver step atual (só logar se mudou)
+    if (status.current_step && status.current_step !== 'idle' && status.current_step !== lastLoggedStep) {
         addLog(`📌 ${status.current_step}`, 'info');
+        lastLoggedStep = status.current_step;
     }
 
     // Atualizar fila se disponível
@@ -475,7 +477,12 @@ function setupWebSocket() {
     // Eventos de etapa (se implementados no backend)
     socket.on('step_update', (data) => {
         updateStepIndicator(data.step);
-        addLog(`📌 Etapa: ${data.step} - ${data.message || ''}`, 'info');
+        // Só logar se o step mudou (evitar duplicação)
+        const stepMessage = `Etapa: ${data.step} - ${data.message || ''}`;
+        if (data.step !== lastLoggedStep) {
+            addLog(`📌 ${stepMessage}`, 'info');
+            lastLoggedStep = data.step;
+        }
     });
 }
 
@@ -759,6 +766,54 @@ async function startProcessing() {
 
     if (mode === 'single' && urls.length > 0) {
         urls = [urls[0]];
+    }
+
+    // Verificar se alguma URL já tem relatório
+    try {
+        const checkResponse = await fetch('/api/check-reports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ urls })
+        });
+
+        if (checkResponse.ok) {
+            const reportData = await checkResponse.json();
+            const urlsWithReports = [];
+            const urlsToProcess = [];
+
+            for (const url of urls) {
+                if (reportData[url] && reportData[url].has_report) {
+                    urlsWithReports.push({
+                        url,
+                        title: reportData[url].title || url,
+                        reportUrl: reportData[url].report_url
+                    });
+                } else {
+                    urlsToProcess.push(url);
+                }
+            }
+
+            // Se houver URLs com relatório, avisar o usuário
+            if (urlsWithReports.length > 0) {
+                const skippedList = urlsWithReports.map(r => `• ${r.title}`).join('\n');
+                showToast(
+                    `⚠️ ${urlsWithReports.length} vídeo(s) já processado(s) serão ignorados. Use a biblioteca para reprocessar.`,
+                    'warning'
+                );
+                addLog(`⏭️ Ignorados ${urlsWithReports.length} vídeos com relatório existente`, 'warning');
+
+                // Atualizar URLs para processar apenas os novos
+                urls = urlsToProcess;
+
+                if (urls.length === 0) {
+                    showToast('Todos os vídeos já foram processados. Use a biblioteca de relatórios para reprocessar.', 'info');
+                    return;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Erro ao verificar relatórios existentes:', e);
+        // Continuar mesmo se a verificação falhar
     }
 
     // Capturar modelo de prompt selecionado
@@ -1195,6 +1250,13 @@ async function refreshReports() {
                         title="Download JSON">
                         📥
                     </a>
+                    <button 
+                        onclick="deleteReport('${report.domain}', '${report.id}', '${report.title.replace(/'/g, "\\'")}')"
+                        aria-label="Excluir relatório ${report.title}"
+                        class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors focus:ring-2 focus:ring-red-500 border-2 border-transparent hover:border-ink hover:shadow-retro"
+                        title="Excluir relatório">
+                        🗑️
+                    </button>
                 </div>
             </div>
         `).join('');
@@ -1215,6 +1277,39 @@ async function refreshReports() {
             </div>
         `;
         addLog('Erro ao carregar relatórios', 'error');
+    }
+}
+
+// Excluir relatório individual
+async function deleteReport(domain, videoId, title) {
+    const confirmed = await showConfirmDialog(
+        '🗑️ Excluir Relatório?',
+        `Tem certeza que deseja excluir o relatório "${title}"?\n\nEsta ação é irreversível.`
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/reports/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ domain, video_id: videoId })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast('✅ Relatório excluído com sucesso!', 'success');
+            addLog(`Relatório "${title}" excluído`, 'info');
+            refreshReports();  // Recarregar lista
+        } else {
+            showToast(`❌ Erro: ${result.error || 'Falha ao excluir'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao excluir relatório:', error);
+        showToast('❌ Erro ao excluir relatório', 'error');
     }
 }
 

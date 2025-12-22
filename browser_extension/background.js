@@ -15,7 +15,37 @@ let pollTimer = null;
 let currentSession = null;
 
 // Função para adicionar ou atualizar manifest no array
-function addOrUpdateManifest(newManifest) {
+async function addOrUpdateManifest(newManifest) {
+  // Verificar se já existe relatório para este vídeo ANTES de adicionar
+  try {
+    for (const host of API_HOSTS) {
+      try {
+        const response = await fetch(`${host}/api/check-reports`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: [newManifest.pageUrl] }),
+          cache: 'no-store'
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const reportInfo = result[newManifest.pageUrl];
+
+          if (reportInfo && reportInfo.has_report) {
+            console.log(`[Video Extractor] ⏭️ Vídeo já processado, ignorando: ${newManifest.pageUrl}`);
+            console.log(`[Video Extractor] 📊 Relatório existente: ${reportInfo.title}`);
+            return null; // Não adicionar manifest
+          }
+          break; // Sucesso na verificação, sair do loop
+        }
+      } catch (e) {
+        continue; // Tentar próximo host
+      }
+    }
+  } catch (e) {
+    console.log('[Video Extractor] Erro ao verificar relatório, continuando com a captura:', e.message);
+  }
+
   // Procurar manifest existente com mesma pageUrl
   const existingIndex = manifests.findIndex(m => m.pageUrl === newManifest.pageUrl);
 
@@ -577,13 +607,44 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     };
 
     // Add to manifests array
-    const manifest = addOrUpdateManifest(capture);
-
-    // Send to API
-    sendToAPI(capture);
-
-    sendResponse({ success: true, manifest });
+    addOrUpdateManifest(capture).then(manifest => {
+      // Send to API
+      sendToAPI(capture);
+      sendResponse({ success: true, manifest });
+    });
     return true;
+  } else if (request.action === 'removeManifest') {
+    const pageUrl = request.pageUrl;
+
+    // 1. Remover localmente
+    const originalLength = manifests.length;
+    manifests = manifests.filter(m => m.pageUrl !== pageUrl);
+    if (manifests.length < originalLength) {
+      chrome.storage.local.set({ manifests });
+      chrome.action.setBadgeText({ text: manifests.length > 0 ? manifests.length.toString() : '' });
+    }
+
+    // 2. Tentar remover no backend
+    (async () => {
+      try {
+        for (const host of API_HOSTS) {
+          try {
+            const response = await fetch(`${host}/api/manifests/delete`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pageUrl })
+            });
+            if (response.ok) break;
+          } catch (e) {
+            continue;
+          }
+        }
+        sendResponse({ success: true });
+      } catch (e) {
+        sendResponse({ success: false, error: e.message });
+      }
+    })();
+    return true; // resposta assíncrona
   } else if (request.action === 'pageMetadataExtracted') {
     // Content script enviou metadados automaticamente
     const pageUrl = request.metadata?.pageUrl;
@@ -797,6 +858,41 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       }
     })();
     return true;
+  } else if (request.action === 'checkReports') {
+    // Verificar se URLs já têm relatórios existentes
+    (async () => {
+      try {
+        const urls = request.urls || [];
+        let result = null;
+
+        for (const host of API_HOSTS) {
+          try {
+            const response = await fetch(`${host}/api/check-reports`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ urls }),
+              cache: 'no-store'
+            });
+
+            if (response.ok) {
+              result = await response.json();
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+
+        if (result) {
+          sendResponse({ success: true, reports: result });
+        } else {
+          sendResponse({ success: false, error: 'Não foi possível verificar relatórios' });
+        }
+      } catch (e) {
+        sendResponse({ success: false, error: e.message });
+      }
+    })();
+    return true; // Keep channel open
   } else if (request.action === 'checkApiHealth') {
     // Check if API is reachable
     (async () => {
@@ -852,7 +948,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
     }
   }
-  // Don't return true for unhandled messages - let them fail naturally
+  // Resposta padrão para evitar "message port closed" se o remetente esperar resposta
+  if (request.action !== 'pageMetadataExtracted') {
+    sendResponse({ success: false, error: 'Ação não reconhecida: ' + request.action });
+  }
+  return false;
 });
 
 // Função auxiliar para processar metadados

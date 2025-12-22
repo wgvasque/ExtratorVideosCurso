@@ -17,9 +17,30 @@ const processingState = {
     completed: new Set() // Set de URLs concluídas
 };
 
+// Sincronizar estado de processamento com o servidor
+async function syncProcessingState() {
+    try {
+        const response = await fetch('/api/status', { cache: 'no-store' });
+        if (response.ok) {
+            const status = await response.json();
+            processingState.current = status.is_processing ? status.current_url : null;
+            processingState.queue = status.queue || [];
+            console.log('[Queue] Sincronizado com servidor:', {
+                current: processingState.current,
+                queue: processingState.queue
+            });
+        }
+    } catch (e) {
+        console.warn('[Queue] Erro ao sincronizar estado:', e);
+    }
+}
+
 // Função para carregar e exibir manifests
 async function loadExtensionManifests() {
     try {
+        // Sincronizar estado de processamento com o servidor
+        await syncProcessingState();
+
         const response = await fetch('/api/manifests');
         const manifests = await response.json();
 
@@ -38,6 +59,22 @@ async function loadExtensionManifests() {
                 </div>
             `;
             return;
+        }
+
+        // Verificar quais manifests já têm relatório
+        let reportInfo = {};
+        try {
+            const urls = manifests.map(m => m.pageUrl);
+            const checkResponse = await fetch('/api/check-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls })
+            });
+            if (checkResponse.ok) {
+                reportInfo = await checkResponse.json();
+            }
+        } catch (e) {
+            console.warn('Erro ao verificar relatórios:', e);
         }
 
         container.innerHTML = manifests.map(m => {
@@ -68,10 +105,14 @@ async function loadExtensionManifests() {
                 </div>
             ` : '';
 
+            // Verificar se já tem relatório
+            const hasReport = reportInfo[m.pageUrl] && reportInfo[m.pageUrl].has_report;
+            const reportData = reportInfo[m.pageUrl] || {};
+
             return `
-                <div class="border-2 border-ink rounded-lg p-4 shadow-retro" style="border-left: 4px solid #10b981; background: white">
+                <div class="border-2 border-ink rounded-lg p-4 shadow-retro" style="border-left: 4px solid ${hasReport ? '#4CAF50' : '#10b981'}; background: white">
                     <!-- Domain -->
-                    <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #10b981; font-size: 12px; margin-bottom: 6px;">
+                    <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: ${hasReport ? '#4CAF50' : '#10b981'}; font-size: 12px; margin-bottom: 6px;">
                         🌐 ${m.domain}
                     </div>
                     
@@ -103,8 +144,27 @@ async function loadExtensionManifests() {
                     <!-- Action Buttons (condicionais baseados no estado) -->
                     <div class="flex flex-wrap gap-2 pt-3 border-t-2 border-ink/10 mt-3">
                         ${(() => {
+                    // Se já tem relatório - mostrar mensagem e botão Ver Relatório
+                    if (hasReport) {
+                        return `
+                            <div style="width: 100%; padding: 10px; background: #e8f5e9; border-radius: 6px; border: 1px solid #4CAF50; margin-bottom: 8px;">
+                                <div style="font-size: 11px; color: #2e7d32; font-weight: 600;">
+                                    ✅ Este vídeo já foi processado.
+                                </div>
+                                <div style="font-size: 10px; color: #666; margin-top: 4px;">
+                                    Para reprocessar, utilize a tela de relatório ou exclua-o da biblioteca.
+                                </div>
+                            </div>
+                            <button onclick="viewReport('/api/report/${reportData.domain}/${reportData.video_id}', '${(reportData.title || videoTitle).replace(/'/g, "\\'")}')" 
+                               class="btn-retro btn-primary text-xs px-3 py-1.5"
+                               style="background: #4CAF50; color: white;"
+                               title="Ver relatório existente">
+                                📊 Ver Relatório
+                            </button>
+                        `;
+                    }
                     // Se está processando
-                    if (processingState.current === m.pageUrl) {
+                    else if (processingState.current === m.pageUrl) {
                         return `
                                     <button onclick="cancelProcessing('${m.pageUrl.replace(/'/g, "\\'")}')" 
                                             class="btn-retro text-xs px-3 py-1.5"
@@ -141,6 +201,12 @@ async function loadExtensionManifests() {
                                 class="btn-retro btn-secondary text-xs px-3 py-1.5"
                                 title="Copiar manifest URL">
                             📋 Copiar
+                        </button>
+                        <button onclick="deleteManifestItem('${m.pageUrl.replace(/'/g, "\\'")}')" 
+                                class="btn-retro text-xs px-3 py-1.5"
+                                style="background: #ef4444; color: white;"
+                                title="Remover este manifest">
+                            🗑️ Excluir
                         </button>
                     </div>
                 </div>
@@ -229,6 +295,38 @@ function copyManifest(manifestUrl) {
             button.innerHTML = originalText;
         }, 2000);
     });
+}
+
+// Função para deletar manifest individual
+async function deleteManifestItem(pageUrl) {
+    const confirmed = await showConfirmDialog(
+        '🗑️ Excluir Manifest?',
+        'Tem certeza que deseja excluir este manifest capturado?'
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/manifests/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pageUrl })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast('✅ Manifest removido com sucesso!', 'success');
+            loadExtensionManifests();  // Recarregar lista
+        } else {
+            showToast(`❌ Erro: ${result.error || 'Falha ao remover'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao deletar manifest:', error);
+        showToast('❌ Erro ao remover manifest', 'error');
+    }
 }
 
 // Função para processar manifest (integrada com fila)

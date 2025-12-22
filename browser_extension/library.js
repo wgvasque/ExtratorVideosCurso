@@ -138,10 +138,10 @@ function filterReports() {
     });
 }
 
-// View report in web interface
+// View report in standalone visualization page (consistent across extension)
 function viewReport(domain, videoId) {
-    const reportUrl = `http://127.0.0.1:5000/api/report/${domain}/${videoId}?version=v2`;
-    window.open(reportUrl, '_blank');
+    const viewUrl = `http://127.0.0.1:5000/view/${encodeURIComponent(domain)}/${encodeURIComponent(videoId)}`;
+    chrome.tabs.create({ url: viewUrl });
 }
 
 // Open URL in browser

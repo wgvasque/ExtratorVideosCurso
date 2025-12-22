@@ -714,8 +714,9 @@
   </div>
 
   <!-- Tabs -->
-  <div class="tabs" style="display: none;">
+  <div class="tabs" style="display: flex;">
     <button class="tab active" data-tab="capture">📡 Captura</button>
+    <button class="tab" data-tab="manifests">📋 Manifests</button>
     <button class="tab" data-tab="library">📚 Biblioteca</button>
     <button class="tab" data-tab="settings">⚙️ Config</button>
   </div>
@@ -819,6 +820,27 @@
       <div style="display: flex; gap: 8px; margin-top: 12px;">
         <button class="btn btn-secondary" id="clearBtn" style="flex: 1;">🗑️ Limpar</button>
         <button class="btn btn-pop" id="refreshBtn" style="flex: 1;">🔄 Atualizar</button>
+      </div>
+    </div>
+
+    <!-- MANIFESTS TAB -->
+    <div id="tab-manifests" class="tab-panel">
+      <div class="card-title">📋 Manifests Capturados</div>
+      <div
+        style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px; margin-bottom: 12px; font-size: 10px; color: #1e40af;">
+        💡 Lista de todos os vídeos capturados pela extensão. Vídeos já processados são destacados em verde.
+      </div>
+
+      <div id="manifests-tab-list">
+        <div class="empty-state">
+          <div class="icon">📋</div>
+          <p>Carregando manifests...</p>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 12px;">
+        <button class="btn btn-secondary" id="clearAllManifestsBtn" style="flex: 1;">🗑️ Limpar Tudo</button>
+        <button class="btn btn-pop" id="refreshManifestsBtn" style="flex: 1;">🔄 Atualizar</button>
       </div>
     </div>
 
